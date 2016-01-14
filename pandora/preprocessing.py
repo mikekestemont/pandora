@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_extraction import DictVectorizer
 from keras.utils import np_utils
 import numpy as np
 
@@ -84,6 +85,19 @@ def vectorize_lemma(seq, char_vector_dict, max_len):
 
     return np.vstack(seq_X)
 
+def parse_morphs(morph):
+    morph_dicts = []
+    for m in morph:
+        d = {}
+        try:
+            for a in m.split('|'):
+                k, v = a.split('=')
+                d[k] = v
+        except ValueError:
+            pass
+        morph_dicts.append(d)
+    return morph_dicts
+
 
 class Preprocessor():
 
@@ -105,34 +119,90 @@ class Preprocessor():
         self.pos_encoder = LabelEncoder()
         self.pos_encoder.fit(pos+('<UNK>',)) # do we need this?
 
+        # fit idx for 'known' tokens and lemmas:
         self.known_tokens = set(tokens)
         self.known_lemmas = set(lemmas)
 
+        # fit morph analysis:
+        morph_dicts = parse_morphs(morph)
+        self.morph_encoder = DictVectorizer(sparse=False)
+        self.morph_encoder.fit(morph_dicts)
+
         return self
 
-    def transform(self, tokens, lemmas, pos, morph):
+    def transform(self, tokens, lemmas=None,
+                  pos=None, morph=None):
         # vectorize focus tokens:
         X_focus = vectorize_tokens(\
                     tokens=tokens,
                     char_vector_dict=self.token_char_dict,
                     max_len=self.max_token_len)
+        returnables = [X_focus]
 
-        # vectorize lemmas:
-        X_lemma = vectorize_lemmas(\
-                    lemmas=lemmas,
-                    char_vector_dict=self.lemma_char_dict,
-                    max_len=self.max_lemma_len)
+        if lemmas:
+            # vectorize lemmas:
+            X_lemma = vectorize_lemmas(\
+                        lemmas=lemmas,
+                        char_vector_dict=self.lemma_char_dict,
+                        max_len=self.max_lemma_len)
+            returnables.append(X_lemma)
 
-        # vectorize pos:
-        pos = [p if p in self.pos_encoder.classes_\
-                    else '<UNK>' for p in pos] # do we need this?
-        pos = self.pos_encoder.transform(pos)
-        
-        X_pos = np_utils.to_categorical(pos,
-                    nb_classes=len(self.pos_encoder.classes_))
+        if pos:
+            # vectorize pos:
+            pos = [p if p in self.pos_encoder.classes_\
+                        else '<UNK>' for p in pos] # do we need this?
+            pos = self.pos_encoder.transform(pos)
+            
+            X_pos = np_utils.to_categorical(pos,
+                        nb_classes=len(self.pos_encoder.classes_))
+            returnables.append(X_pos)
 
-        return X_focus, X_lemma, X_pos
+        if morph:
+            # vectorize morph:
+            morph_dicts = parse_morphs(morph)
+            X_morph = self.morph_encoder.transform(morph_dicts)
+            returnables.append(X_morph)
+
+        if len(returnables) > 1:
+            return returnables
+        else:
+            return returnables[0]
 
     def fit_transform(self, tokens, lemmas, pos, morph):
         self.fit(tokens, lemmas, pos, morph)
         return self.transform(tokens, lemmas, pos, morph)
+
+
+    def inverse_transform_lemmas(self, predictions):
+        """
+        For each prediction, convert 2D char matrix
+        with probabilities to actual lemmas, using
+        character index for the output strings.
+        """
+        pred_lemmas = []
+
+        for pred in predictions:
+            pred_lem = ''
+            for positions in pred:
+                top_idx = np.argmax(positions) # winning position
+                c = self.lemma_char_idx[top_idx] # look up corresponding char
+                if c == '$':
+                    break
+                else:
+                    pred_lem += c # add character
+            pred_lemmas.append(pred_lem)
+
+        return pred_lemmas
+
+    def inverse_transform_pos(self, predictions):
+        """
+        """
+        predictions = np.argmax(predictions, axis=1)
+        return self.pos_encoder.inverse_transform(predictions)
+
+    def inverse_transform_morph(self, predictions):
+        """
+        """
+        #print(self.morph_encoder.feature_names_)
+        return
+        

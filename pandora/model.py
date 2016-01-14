@@ -9,6 +9,7 @@ from keras.optimizers import Adam
 def build_model(token_len, token_char_vector_dict,
                 nb_encoding_layers, nb_dense_dims,
                 lemma_len, lemma_char_vector_dict,
+                nb_tags, nb_morph_cats,
                 ):
     m = Graph()
 
@@ -55,21 +56,51 @@ def build_model(token_len, token_char_vector_dict,
                 name='decoder_dropout',
                 input='decoder')
 
+    # add lemma decoder
     m.add_node(TimeDistributedDense(output_dim=len(lemma_char_vector_dict)),
-                name='label_dense',
+                name='lemma_dense',
                 input='decoder_dropout')
     m.add_node(Dropout(0.05),
-                name='label_dropout',
-                input='label_dense')
+                name='lemma_dense_dropout',
+                input='lemma_dense')
     m.add_node(Activation('softmax'),
-                name='label_softmax',
-                input='label_dropout')
+                name='lemma_softmax',
+                input='lemma_dense_dropout')
+    m.add_output(name='lemma_out', input='lemma_softmax')
 
-    m.add_output(name='lemma_out', input='label_softmax')
+    # add pos tag output:
+    m.add_node(Dense(output_dim=nb_tags),
+               name='pos_dense',
+               input='final_encoder')
+    m.add_node(Dropout(0.05),
+                name='pos_dense_dropout',
+                input='pos_dense')
+    m.add_node(Activation('softmax'),
+                name='pos_softmax',
+                input='pos_dense_dropout')
+    m.add_output(name='pos_out', input='pos_softmax') 
+
+    """
+    # add morph-analysis output:
+    m.add_node(Dense(output_dim=nb_morph_cats),
+               name='morph_dense',
+               inputs=['final_encoder', 'pos_softmax'])
+    m.add_node(Dropout(0.05),
+                name='morph_dense_dropout',
+                input='morph_dense')
+    m.add_node(Activation('sigmoid'),
+                name='morph_sigmoid',
+                input='morph_dense_dropout')
+    m.add_output(name='morph_out', input='morph_sigmoid')        
+    """
 
     adam = Adam(epsilon=1e-8, clipnorm=5)
 
     m.compile(optimizer=adam,
-              loss={'lemma_out':'categorical_crossentropy'})
+              loss={
+                    'lemma_out': 'categorical_crossentropy',
+                    'pos_out': 'categorical_crossentropy',
+                    #'morph_out': 'binary_crossentropy',
+                    })
 
     return m

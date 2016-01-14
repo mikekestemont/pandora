@@ -32,3 +32,14 @@ def load_annotated_file(filepath, format, nb_instances):
             if len(instances) >= nb_instances:
                 break
     return instances
+
+def load_raw_file(filepath, nb_instances=1000):
+    instances = []
+    for line in codecs.open(filepath, 'r', 'utf8'):
+        line = line.strip()
+        if line:
+            instances.append(line)
+        nb_instances -= 1
+        if nb_instances <= 0:
+            break
+    return instances
