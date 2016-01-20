@@ -26,6 +26,7 @@ def load_annotated_file(filepath, format, nb_instances):
                 try:
                     idx, tok, _, lem, _, pos, morph = \
                         line.split()[:7]
+                    morph = morph.split('|')
                     instances.append([tok, lem, pos, morph])
                 except ValueError:
                     pass

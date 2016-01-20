@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+from operator import itemgetter
 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction import DictVectorizer
@@ -87,10 +88,10 @@ def vectorize_lemma(seq, char_vector_dict, max_len):
 
 def parse_morphs(morph):
     morph_dicts = []
-    for m in morph:
+    for ml in morph:
         d = {}
         try:
-            for a in m.split('|'):
+            for a in ml:
                 k, v = a.split('=')
                 d[k] = v
         except ValueError:
@@ -127,6 +128,15 @@ class Preprocessor():
         morph_dicts = parse_morphs(morph)
         self.morph_encoder = DictVectorizer(sparse=False)
         self.morph_encoder.fit(morph_dicts)
+
+        self.morph_idxs = {}
+        for i, feat_name in enumerate(self.morph_encoder.feature_names_):
+            label, _ = feat_name.strip().split('=')
+            try:
+                self.morph_idxs[label].add(i)
+            except KeyError:
+                self.morph_idxs[label] = set()
+                self.morph_idxs[label].add(i)
 
         return self
 
@@ -200,9 +210,23 @@ class Preprocessor():
         predictions = np.argmax(predictions, axis=1)
         return self.pos_encoder.inverse_transform(predictions)
 
-    def inverse_transform_morph(self, predictions):
+    def inverse_transform_morph(self, predictions, threshold=1.0):
         """
+        Only select highest activation per category, if that max
+        is above threshold.
         """
-        #print(self.morph_encoder.feature_names_)
-        return
+        morphs = []
+        for pred in predictions:
+            m = []
+            for label, idxs in self.morph_idxs.items():
+                scores = ((pred[idx], idx) for idx in idxs)
+                max_score = max(scores, key=itemgetter(0))
+                if max_score[0] >= threshold:
+                    m.append(self.morph_encoder.feature_names_[max_score[1]])
+            print(m)
+            if m:
+                morphs.append(m)
+            else:
+                morphs.append(['_'])
+        return morphs
         

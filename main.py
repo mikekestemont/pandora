@@ -7,20 +7,20 @@ from pandora.tagger import Tagger
 
 def main():
     print('::: started :::')
-    train_insts = pandora.utils.load_annotated_file('data/malaga/malaga_train.conll',
+    train_insts = pandora.utils.load_annotated_file('data/capitula0/capitularien_all_morphTag_Vita_Vita_Visio_test0.conll',
                                             format='conll',
-                                            nb_instances=250000)
-    dev_insts = pandora.utils.load_annotated_file('data/malaga/malaga_dev.conll',
+                                            nb_instances=30000)
+    dev_insts = pandora.utils.load_annotated_file('data/capitula1/capitularien_all_morphTag_Vita_Vita_Visio_test1.conll',
                                             format='conll',
                                             nb_instances=10000)
 
-    unseen_tokens = pandora.utils.load_raw_file('data/malaga/meld_test.txt',
-                                            nb_instances=10000)
+    #unseen_tokens = pandora.utils.load_raw_file('data/malaga/meld_test.txt',
+    #                                        nb_instances=1000)
     
     tagger = Tagger()
     tagger.setup_for_fit(train_instances=train_insts,
                dev_instances=dev_insts,
-               unseen_tokens=unseen_tokens)
+               unseen_tokens=None)
 
     for i in range(100):
         tagger.epoch()

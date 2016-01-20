@@ -80,7 +80,7 @@ def build_model(token_len, token_char_vector_dict,
                 input='pos_dense_dropout')
     m.add_output(name='pos_out', input='pos_softmax') 
 
-    """
+    
     # add morph-analysis output:
     m.add_node(Dense(output_dim=nb_morph_cats),
                name='morph_dense',
@@ -92,7 +92,7 @@ def build_model(token_len, token_char_vector_dict,
                 name='morph_sigmoid',
                 input='morph_dense_dropout')
     m.add_output(name='morph_out', input='morph_sigmoid')        
-    """
+    
 
     adam = Adam(epsilon=1e-8, clipnorm=5)
 
@@ -100,7 +100,7 @@ def build_model(token_len, token_char_vector_dict,
               loss={
                     'lemma_out': 'categorical_crossentropy',
                     'pos_out': 'categorical_crossentropy',
-                    #'morph_out': 'binary_crossentropy',
+                    'morph_out': 'binary_crossentropy',
                     })
 
     return m
