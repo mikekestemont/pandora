@@ -137,7 +137,7 @@ class Preprocessor():
             except KeyError:
                 self.morph_idxs[label] = set()
                 self.morph_idxs[label].add(i)
-
+        
         return self
 
     def transform(self, tokens, lemmas=None,

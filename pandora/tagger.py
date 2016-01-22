@@ -10,16 +10,21 @@ import codecs
 import evaluation
 from model import build_model
 from preprocessing import Preprocessor
+from pretraining import Pretrainer
 
 
 class Tagger():
 
     def __init__(self):
         self.nb_encoding_layers = 3
-        self.nb_dense_dims = 150
+        self.nb_dense_dims = 300
         self.nb_epochs = 0
         self.batch_size = 100
         self.setup = False
+        self.nb_left_tokens = 2
+        self.nb_right_tokens = 2
+        self.nb_embedding_dims = 150
+
 
     def setup_for_fit(self, train_instances, dev_instances, unseen_tokens, include_morph=True):
         if include_morph:
@@ -39,13 +44,29 @@ class Tagger():
             self.preprocessor.fit_transform(tokens=self.train_tokens,
                                                lemmas=self.train_lemmas,
                                                pos=self.train_pos,
-                                               morph=self.train_morph)  
+                                               morph=self.train_morph)
+
+        assert self.train_X_focus.shape[0] ==  len(self.train_tokens)
 
         self.dev_X_focus, self.dev_X_lemma, self.dev_X_pos, self.dev_X_morph = \
             self.preprocessor.transform(tokens=self.dev_tokens,
                                         lemmas=self.dev_lemmas,
                                         pos=self.dev_pos,
                                         morph=self.dev_morph)
+
+        # all contextual stuff:
+        self.pretrainer = Pretrainer(nb_left_tokens=self.nb_left_tokens,
+                                     nb_right_tokens=self.nb_right_tokens,
+                                     size=self.nb_embedding_dims)
+        self.pretrained_embeddings, self.train_token_vocab = \
+            self.pretrainer.fit(tokens=self.train_tokens)
+
+        self.train_X_left, self.train_X_right = \
+            self.pretrainer.transform(tokens=self.train_tokens)
+        self.dev_X_left, self.dev_X_right = \
+            self.pretrainer.transform(tokens=self.dev_tokens)
+
+        assert self.train_X_left.shape[0] == len(self.train_tokens)
 
         try:
             nb_morph_cats = self.train_X_morph.shape[1]
@@ -56,17 +77,25 @@ class Tagger():
         if unseen_tokens:
             self.unseen_tokens = unseen_tokens
             self.unseen_X_focus = self.preprocessor.transform(tokens=self.unseen_tokens)
+            self.unseen_X_left, self.unseen_X_right = \
+                    self.pretrainer.transform(tokens=self.unseen_tokens)
 
         print('Building model...')
         self.model = build_model(token_len=self.preprocessor.max_token_len,
+                                 token_char_vector_dict=self.preprocessor.token_char_dict,
                                  lemma_len=self.preprocessor.max_lemma_len,
                                  nb_tags=len(self.preprocessor.pos_encoder.classes_),
                                  nb_morph_cats=nb_morph_cats,
-                                 token_char_vector_dict=self.preprocessor.token_char_dict,
                                  lemma_char_vector_dict=self.preprocessor.lemma_char_dict,
                                  nb_encoding_layers=self.nb_encoding_layers,
                                  nb_dense_dims=self.nb_dense_dims,
+                                 nb_embedding_dims=self.nb_embedding_dims,
+                                 nb_train_tokens=len(self.train_token_vocab),
+                                 nb_left_tokens=self.nb_left_tokens,
+                                 nb_right_tokens=self.nb_right_tokens,
+                                 pretrained_embeddings=self.pretrained_embeddings,
                                 )
+
         self.setup = True
 
     def epoch(self):
@@ -78,6 +107,8 @@ class Tagger():
 
         # fit on train:
         d = {'focus_in': self.train_X_focus,
+             'left_in': self.train_X_left,
+             'right_in': self.train_X_right,
              'lemma_out': self.train_X_lemma,
              'pos_out': self.train_X_pos,
              'morph_out': self.train_X_morph,
@@ -91,7 +122,10 @@ class Tagger():
         print("\t - loss:\t{:.3}".format(train_loss))
 
         # get dev predictions:
-        d = {'focus_in': self.dev_X_focus}
+        d = {'focus_in': self.dev_X_focus,
+             'left_in': self.dev_X_left,
+             'right_in': self.dev_X_right,
+             }
         predictions = self.model.predict(data=d,
                                 batch_size=self.batch_size)
         

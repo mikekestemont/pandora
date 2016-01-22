@@ -3,21 +3,36 @@
 
 from keras.models import Graph
 from keras.layers.recurrent import LSTM
-from keras.layers.core import Dense, TimeDistributedDense, Dropout, Activation, RepeatVector
+from keras.layers.core import Dense, TimeDistributedDense,\
+                              Dropout, Activation, RepeatVector,\
+                              Flatten
+from keras.layers.embeddings import Embedding
 from keras.optimizers import Adam
 
 def build_model(token_len, token_char_vector_dict,
                 nb_encoding_layers, nb_dense_dims,
                 lemma_len, lemma_char_vector_dict,
-                nb_tags, nb_morph_cats,
+                nb_tags, nb_morph_cats, nb_train_tokens,
+                nb_left_tokens, nb_right_tokens,
+                nb_embedding_dims,
+                pretrained_embeddings=None,
                 ):
+    
     m = Graph()
 
     # add input layer:
     m.add_input(name='focus_in',
                 input_shape=(token_len, len(token_char_vector_dict)))
 
-    # add recurrent layers:
+    # add context embeddings:
+    m.add_input(name='left_in',
+                input_shape=(1,),
+                dtype='int')
+    m.add_input(name='right_in', 
+                input_shape=(1,),
+                dtype='int')
+
+    # add recurrent layers for focus token:
     return_seqs = True
     for i in range(nb_encoding_layers):
         if i == 0:
@@ -25,25 +40,64 @@ def build_model(token_len, token_char_vector_dict,
         else:
             input_name = 'encoder_dropout_'+str(i)
 
-        if i == nb_encoding_layers-1:
-            output_name = 'final_encoder'
+        if i == (nb_encoding_layers - 1):
+            output_name = 'final_focus_encoder'
             return_seqs = False
         else:
-            output_name = 'encoder_dropout_'+str(i+1)
+            output_name = 'encoder_dropout_'+str(i + 1)
 
         m.add_node(LSTM(output_dim=nb_dense_dims,
                         return_sequences=return_seqs,
                         activation='tanh'),
-                        name='encoder_'+str(i+1),
+                        name='encoder_'+str(i + 1),
                         input=input_name)
         m.add_node(Dropout(0.05),
                     name=output_name,
-                    input='encoder_'+str(i+1))
+                    input='encoder_'+str(i + 1))
+
+    
+    # add contextual embedding layers:
+    m.add_node(Embedding(input_dim=nb_train_tokens,
+                         output_dim=nb_embedding_dims,
+                         weights=pretrained_embeddings,
+                         input_length=nb_left_tokens),
+                   name='left_embedding', input='left_in')
+    m.add_node(Flatten(),
+                   name="left_flatten", input="left_embedding")
+    m.add_node(Dropout(0.5),
+                   name='left_dropout', input='left_flatten')
+    m.add_node(Activation('relu'),
+                   name='left_relu', input='left_dropout')
+    m.add_node(Dense(output_dim=nb_dense_dims),
+                   name="left_dense1", input="left_relu")
+    m.add_node(Dropout(0.5),
+                   name="left_dropout2", input="left_dense1")
+    m.add_node(Activation('relu'),
+                   name='left_out', input='left_dropout2')
+
+    m.add_node(Embedding(input_dim=nb_train_tokens,
+                         output_dim=nb_embedding_dims,
+                         weights=pretrained_embeddings,
+                         input_length=nb_right_tokens),
+                   name='right_embedding', input='right_in')
+    m.add_node(Flatten(),
+                   name="right_flatten", input="right_embedding")
+    m.add_node(Dropout(0.5),
+                   name='right_dropout', input='right_flatten')
+    m.add_node(Activation('relu'),
+                   name='right_relu', input='right_dropout')
+    m.add_node(Dense(output_dim=nb_dense_dims),
+                   name="right_dense1", input="right_relu")
+    m.add_node(Dropout(0.5),
+                   name="right_dropout2", input="right_dense1")
+    m.add_node(Activation('relu'),
+                   name='right_out', input='right_dropout2')
+    
 
     # repeat final input
     m.add_node(RepeatVector(lemma_len),
           name='encoder_repeat',
-          input='final_encoder')
+          inputs=['left_out', 'final_focus_encoder', 'right_out'])
 
     # 2nd, single recurrent layer to generate output sequence:
     m.add_node(LSTM(input_dim=nb_dense_dims,
@@ -71,7 +125,7 @@ def build_model(token_len, token_char_vector_dict,
     # add pos tag output:
     m.add_node(Dense(output_dim=nb_tags),
                name='pos_dense',
-               input='final_encoder')
+               input='final_focus_encoder')
     m.add_node(Dropout(0.05),
                 name='pos_dense_dropout',
                 input='pos_dense')
@@ -84,7 +138,7 @@ def build_model(token_len, token_char_vector_dict,
     # add morph-analysis output:
     m.add_node(Dense(output_dim=nb_morph_cats),
                name='morph_dense',
-               inputs=['final_encoder', 'pos_softmax'])
+               inputs=['final_focus_encoder', 'pos_softmax'])
     m.add_node(Dropout(0.05),
                 name='morph_dense_dropout',
                 input='morph_dense')
