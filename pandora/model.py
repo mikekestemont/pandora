@@ -5,7 +5,7 @@ from keras.models import Graph
 from keras.layers.recurrent import LSTM
 from keras.layers.core import Dense, TimeDistributedDense,\
                               Dropout, Activation, RepeatVector,\
-                              Flatten
+                              Flatten, Merge
 from keras.layers.embeddings import Embedding
 from keras.optimizers import Adam
 
@@ -46,7 +46,8 @@ def build_model(token_len, token_char_vector_dict,
         else:
             output_name = 'encoder_dropout_'+str(i + 1)
 
-        m.add_node(LSTM(output_dim=nb_dense_dims,
+        m.add_node(LSTM(input_dim=nb_dense_dims,
+                        output_dim=nb_dense_dims,
                         return_sequences=return_seqs,
                         activation='tanh'),
                         name='encoder_'+str(i + 1),
@@ -93,12 +94,38 @@ def build_model(token_len, token_char_vector_dict,
     m.add_node(Activation('relu'),
                    name='right_out', input='right_dropout2')
     
-
+    m.add_node(Activation('linear'),
+               name='joined',
+               inputs=['left_out', 'final_focus_encoder', 'right_out'],
+               merge_mode='concat',
+               concat_axis = -1)
     # repeat final input
     m.add_node(RepeatVector(lemma_len),
           name='encoder_repeat',
-          inputs=['left_out', 'final_focus_encoder', 'right_out'])
+          input='joined')
+    
+    # add recurrent layers to generate lemma:
+    for i in range(nb_encoding_layers):
+        if i == 0:
+            input_name = 'encoder_repeat'
+        else:
+            input_name = 'decoder_dropout_'+str(i)
 
+        if i == (nb_encoding_layers - 1):
+            output_name = 'final_focus_decoder'
+        else:
+            output_name = 'decoder_dropout_'+str(i + 1)
+
+        m.add_node(LSTM(input_dim=nb_dense_dims,
+                        output_dim=nb_dense_dims,
+                        return_sequences=True,
+                        activation='tanh'),
+                        name='decoder_'+str(i + 1),
+                        input=input_name)
+        m.add_node(Dropout(0.05),
+                    name=output_name,
+                    input='decoder_'+str(i + 1))
+    """
     # 2nd, single recurrent layer to generate output sequence:
     m.add_node(LSTM(input_dim=nb_dense_dims,
                     output_dim=nb_dense_dims,
@@ -107,13 +134,15 @@ def build_model(token_len, token_char_vector_dict,
            input='encoder_repeat',
            name='decoder')
     m.add_node(Dropout(0.05),
-                name='decoder_dropout',
+                name='final_focus_decoder',
                 input='decoder')
+    """
+    
 
     # add lemma decoder
     m.add_node(TimeDistributedDense(output_dim=len(lemma_char_vector_dict)),
                 name='lemma_dense',
-                input='decoder_dropout')
+                input='final_focus_decoder')
     m.add_node(Dropout(0.05),
                 name='lemma_dense_dropout',
                 input='lemma_dense')

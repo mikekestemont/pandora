@@ -8,7 +8,7 @@ import codecs
 
 import numpy as np
 
-def load_annotated_data(directory, format='conll', nb_instances=1000):
+def load_annotated_data(directory, format='conll', nb_instances=None):
     instances = []
     for filepath in glob.glob(directory+'/*'):
         insts = load_annotated_file(filepath=filepath,
@@ -17,7 +17,7 @@ def load_annotated_data(directory, format='conll', nb_instances=1000):
         instances.extend(insts)
     return instances
 
-def load_annotated_file(filepath, format, nb_instances):
+def load_annotated_file(filepath, format, nb_instances=None):
     instances = []
     if format == 'conll':
         for line in codecs.open(filepath, 'r', 'utf8'):
@@ -30,8 +30,9 @@ def load_annotated_file(filepath, format, nb_instances):
                     instances.append([tok, lem, pos, morph])
                 except ValueError:
                     pass
-            if len(instances) >= nb_instances:
-                break
+            if nb_instances:
+                if len(instances) >= nb_instances:
+                    break
     return instances
 
 def load_raw_file(filepath, nb_instances=1000):
