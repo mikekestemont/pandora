@@ -21,9 +21,9 @@ class Tagger():
         self.nb_epochs = 0
         self.batch_size = 128
         self.setup = False
-        self.nb_left_tokens = 2
-        self.nb_right_tokens = 1
-        self.nb_embedding_dims = 128
+        self.nb_left_tokens = 3
+        self.nb_right_tokens = 2
+        self.nb_embedding_dims = 100
 
 
     def setup_for_fit(self, train_instances, dev_instances, unseen_tokens, include_morph=True):
@@ -106,6 +106,10 @@ class Tagger():
         self.nb_epochs += 1
         print("-> epoch ", self.nb_epochs, "...")
 
+        # update learning rate at specific points:
+        if self.nb_epochs in (5, 10, 15, 20, 25, 30, 35, 40, 45):
+            self.model.optimizer.lr.set_value(self.model.optimizer.lr.get_value() / 2.0)
+
         # fit on train:
         d = {'focus_in': self.train_X_focus,
              'left_in': self.train_X_left,
@@ -137,7 +141,7 @@ class Tagger():
                             predictions=predictions['pos_out'])
         pred_morph = self.preprocessor.inverse_transform_morph(\
                             predictions=predictions['morph_out'],
-                            threshold=0.75)
+                            threshold=0.5)
 
         # check a random selection
         for token, pred_lem, pred_p in zip(self.dev_tokens[300:400], pred_lemmas[300:400], pred_pos[300:400]):

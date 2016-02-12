@@ -52,7 +52,7 @@ def build_model(token_len, token_char_vector_dict,
                         activation='tanh'),
                         name='encoder_'+str(i + 1),
                         input=input_name)
-        m.add_node(Dropout(0.05),
+        m.add_node(Dropout(0.15),
                     name=output_name,
                     input='encoder_'+str(i + 1))
 
@@ -65,13 +65,13 @@ def build_model(token_len, token_char_vector_dict,
                    name='left_embedding', input='left_in')
     m.add_node(Flatten(),
                    name="left_flatten", input="left_embedding")
-    m.add_node(Dropout(0.5),
+    m.add_node(Dropout(0.25),
                    name='left_dropout', input='left_flatten')
     m.add_node(Activation('relu'),
                    name='left_relu', input='left_dropout')
     m.add_node(Dense(output_dim=nb_dense_dims),
                    name="left_dense1", input="left_relu")
-    m.add_node(Dropout(0.5),
+    m.add_node(Dropout(0.25),
                    name="left_dropout2", input="left_dense1")
     m.add_node(Activation('relu'),
                    name='left_out', input='left_dropout2')
@@ -83,13 +83,13 @@ def build_model(token_len, token_char_vector_dict,
                    name='right_embedding', input='right_in')
     m.add_node(Flatten(),
                    name="right_flatten", input="right_embedding")
-    m.add_node(Dropout(0.5),
+    m.add_node(Dropout(0.25),
                    name='right_dropout', input='right_flatten')
     m.add_node(Activation('relu'),
                    name='right_relu', input='right_dropout')
     m.add_node(Dense(output_dim=nb_dense_dims),
                    name="right_dense1", input="right_relu")
-    m.add_node(Dropout(0.5),
+    m.add_node(Dropout(0.25),
                    name="right_dropout2", input="right_dense1")
     m.add_node(Activation('relu'),
                    name='right_out', input='right_dropout2')
@@ -122,7 +122,7 @@ def build_model(token_len, token_char_vector_dict,
                         activation='tanh'),
                         name='decoder_'+str(i + 1),
                         input=input_name)
-        m.add_node(Dropout(0.05),
+        m.add_node(Dropout(0.15),
                     name=output_name,
                     input='decoder_'+str(i + 1))
     """
@@ -143,7 +143,7 @@ def build_model(token_len, token_char_vector_dict,
     m.add_node(TimeDistributedDense(output_dim=len(lemma_char_vector_dict)),
                 name='lemma_dense',
                 input='final_focus_decoder')
-    m.add_node(Dropout(0.05),
+    m.add_node(Dropout(0.15),
                 name='lemma_dense_dropout',
                 input='lemma_dense')
     m.add_node(Activation('softmax'),
@@ -155,7 +155,7 @@ def build_model(token_len, token_char_vector_dict,
     m.add_node(Dense(output_dim=nb_tags),
                name='pos_dense',
                input='final_focus_encoder')
-    m.add_node(Dropout(0.05),
+    m.add_node(Dropout(0.25),
                 name='pos_dense_dropout',
                 input='pos_dense')
     m.add_node(Activation('softmax'),
@@ -165,15 +165,23 @@ def build_model(token_len, token_char_vector_dict,
 
     
     # add morph-analysis output:
-    m.add_node(Dense(output_dim=nb_morph_cats),
+    m.add_node(Dense(output_dim=nb_dense_dims),
                name='morph_dense',
-               inputs=['final_focus_encoder', 'pos_softmax'])
-    m.add_node(Dropout(0.05),
+               #inputs=['final_focus_encoder', 'pos_softmax'])
+               input='final_focus_encoder')
+    m.add_node(Dropout(0.25),
                 name='morph_dense_dropout',
                 input='morph_dense')
+      # add morph-analysis output:
+    m.add_node(Dense(output_dim=nb_morph_cats),
+               name='morph_dense2',
+               input='morph_dense_dropout')
+    m.add_node(Dropout(0.25),
+                name='morph_dense_dropout2',
+                input='morph_dense2')
     m.add_node(Activation('sigmoid'),
                 name='morph_sigmoid',
-                input='morph_dense_dropout')
+                input='morph_dense_dropout2')
     m.add_output(name='morph_out', input='morph_sigmoid')        
     
 

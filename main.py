@@ -9,10 +9,10 @@ def main():
     print('::: started :::')
     train_insts = pandora.utils.load_annotated_file('data/latin/train.conll',
                                             format='conll',
-                                            nb_instances=10000)
+                                            nb_instances=1000000000000)
     dev_insts = pandora.utils.load_annotated_file('data/latin/test.conll',
                                             format='conll',
-                                            nb_instances=10000)
+                                            nb_instances=1000000000000)
 
     #unseen_tokens = pandora.utils.load_raw_file('data/malaga/meld_test.txt',
     #                                        nb_instances=1000)
