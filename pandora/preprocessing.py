@@ -124,6 +124,10 @@ class Preprocessor():
         self.known_tokens = set(tokens)
         self.known_lemmas = set(lemmas)
 
+        self.morph_encoder = LabelEncoder()
+        self.morph_encoder.fit(morph+('<UNK>',))
+
+        """ legacy:
         # fit morph analysis:
         morph_dicts = parse_morphs(morph)
         self.morph_encoder = DictVectorizer(sparse=False)
@@ -137,6 +141,7 @@ class Preprocessor():
             except KeyError:
                 self.morph_idxs[label] = set()
                 self.morph_idxs[label].add(i)
+        """
         
         return self
 
@@ -168,10 +173,18 @@ class Preprocessor():
             returnables.append(X_pos)
 
         if morph:
+            morph = [m if m in self.morph_encoder.classes_\
+                        else '<UNK>' for m in morph] # do we need this?
+            morph = self.morph_encoder.transform(morph)
+            X_morph = np_utils.to_categorical(morph,
+                        nb_classes=len(self.morph_encoder.classes_))
+            returnables.append(X_morph)
+            """ legacy:
             # vectorize morph:
             morph_dicts = parse_morphs(morph)
             X_morph = self.morph_encoder.transform(morph_dicts)
-            returnables.append(X_morph)
+            
+            """
 
         if len(returnables) > 1:
             return returnables
@@ -201,7 +214,7 @@ class Preprocessor():
                 else:
                     pred_lem += c # add character
             pred_lemmas.append(pred_lem)
-
+        
         return pred_lemmas
 
     def inverse_transform_pos(self, predictions):
@@ -215,6 +228,10 @@ class Preprocessor():
         Only select highest activation per category, if that max
         is above threshold.
         """
+        predictions = np.argmax(predictions, axis=1)
+        return self.morph_encoder.inverse_transform(predictions)
+
+        """ legacy:
         morphs = []
         for pred in predictions:
             m = []
@@ -228,5 +245,6 @@ class Preprocessor():
                 morphs.append(m)
             else:
                 morphs.append(['_'])
+        """
         return morphs
         

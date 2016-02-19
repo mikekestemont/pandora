@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 from collections import Counter
 from operator import itemgetter
 import numpy as np
 
-def single_label_accuracies(gold, silver, test_tokens, known_tokens):
+def single_label_accuracies(gold, silver, test_tokens, known_tokens,
+                            print_scores=True):
     """
     Calculate accuracies for all, known and unknown tokens.
     Uses index of items seen during training.
@@ -31,6 +34,11 @@ def single_label_accuracies(gold, silver, test_tokens, known_tokens):
     unk_acc = 1.0
     if nb_unk > 0:
         unk_acc = unk_corr / nb_unk
+
+    if print_scores:
+        print('+\tall acc:', all_acc)
+        print('+\tkno acc:', kno_acc)
+        print('+\tunk acc:', unk_acc)
 
     return all_acc, kno_acc, unk_acc
 

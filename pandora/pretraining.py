@@ -86,9 +86,11 @@ class Pretrainer:
         return [np.asarray(weights)]
 
     def transform(self, tokens):
-        left_X, right_X = [], []
+
+        context_ints = []
 
         for curr_idx, token in enumerate(tokens):
+            ints = []
             # vectorize left context:
             left_context_tokens = [tokens[curr_idx-(t+1)]\
                                     for t in range(self.nb_left_tokens)\
@@ -99,7 +101,7 @@ class Pretrainer:
                             for t in left_context_tokens]
             while len(idxs) < self.nb_left_tokens:
                 idxs = [0] + idxs
-            left_X.append(idxs)
+            ints.extend(idxs)
 
             # vectorize right context:
             right_context_tokens = [tokens[curr_idx+t+1]\
@@ -111,15 +113,17 @@ class Pretrainer:
                             for t in right_context_tokens]
             while len(idxs) < self.nb_right_tokens:
                 idxs.append(0)
-            right_X.append(idxs)
+            ints.extend(idxs)
 
-        return np.asarray(left_X), np.asarray(right_X)
+            context_ints.append(ints)
+
+        return np.asarray(context_ints, dtype='int8')
 
 
     def plot_mfi(self, outputfile='embeddings.pdf', nb_clusters=8):
         # collect embeddings for mfi:
         X = np.asarray([self.w2v_model[w] for w in self.mfi \
-                            if w in self.w2v_model], dtype='float64')
+                            if w in self.w2v_model], dtype='float32')
         # dimension reduction:
         tsne = TSNE(n_components=2)
         coor = tsne.fit_transform(X) # unsparsify
