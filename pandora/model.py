@@ -14,6 +14,8 @@ def build_model(token_len, token_char_vector_dict,
                 nb_context_tokens,
                 nb_embedding_dims,
                 pretrained_embeddings=None,
+                include_token=True,
+                include_context=True,
                 include_lemma=True,
                 include_pos=True,
                 include_morph=True,
@@ -21,65 +23,77 @@ def build_model(token_len, token_char_vector_dict,
     
     m = Graph()
 
-    # add input layer:
-    m.add_input(name='focus_in',
-                input_shape=(token_len, len(token_char_vector_dict)))
+    subnets = []
 
-    # add context embeddings:
-    m.add_input(name='context_in',
-                input_shape=(1,),
-                dtype='int')
+    if include_token:
+        # add input layer:
+        m.add_input(name='focus_in',
+                    input_shape=(token_len, len(token_char_vector_dict)))
 
-    # add recurrent layers for focus token:
-    return_seqs = True
-    for i in range(nb_encoding_layers):
-        if i == 0:
-            input_name = 'focus_in'
-        else:
-            input_name = 'encoder_dropout_'+str(i)
 
-        if i == (nb_encoding_layers - 1):
-            output_name = 'final_focus_encoder'
-            return_seqs = False
-        else:
-            output_name = 'encoder_dropout_'+str(i + 1)
+        # add recurrent layers for focus token:
+        return_seqs = True
+        for i in range(nb_encoding_layers):
+            if i == 0:
+                input_name = 'focus_in'
+            else:
+                input_name = 'encoder_dropout_'+str(i)
 
-        m.add_node(LSTM(input_dim=nb_dense_dims,
-                        output_dim=nb_dense_dims,
-                        return_sequences=return_seqs,
-                        activation='tanh'),
-                        name='encoder_'+str(i + 1),
-                        input=input_name)
-        m.add_node(Dropout(0.01),
-                    name=output_name,
-                    input='encoder_'+str(i + 1))
+            if i == (nb_encoding_layers - 1):
+                output_name = 'final_focus_encoder'
+                return_seqs = False
+            else:
+                output_name = 'encoder_dropout_'+str(i + 1)
 
-    
-    # add contextual embedding layers:
-    m.add_node(Embedding(input_dim=nb_train_tokens,
-                         output_dim=nb_embedding_dims,
-                         weights=pretrained_embeddings,
-                         input_length=nb_context_tokens),
-                   name='context_embedding', input='context_in')
-    m.add_node(Flatten(),
-                   name="context_flatten", input="context_embedding")
-    m.add_node(Dropout(0.25),
-                   name='context_dropout', input='context_flatten')
-    m.add_node(Activation('relu'),
-                   name='context_relu', input='context_dropout')
-    m.add_node(Dense(output_dim=nb_dense_dims),
-                   name="context_dense1", input="context_relu")
-    m.add_node(Dropout(0.25),
-                   name="context_dropout2", input="context_dense1")
-    m.add_node(Activation('relu'),
-                   name='context_out', input='context_dropout2')
-    
-    # join subnets:
-    m.add_node(Activation('linear'),
-               name='joined',
-               inputs=['final_focus_encoder', 'context_out'],
-               merge_mode='concat',
-               concat_axis = -1)
+            m.add_node(LSTM(input_dim=nb_dense_dims,
+                            output_dim=nb_dense_dims,
+                            return_sequences=return_seqs,
+                            activation='tanh'),
+                            name='encoder_'+str(i + 1),
+                            input=input_name)
+            m.add_node(Dropout(0.01),
+                        name=output_name,
+                        input='encoder_'+str(i + 1))
+        subnets.append('final_focus_encoder')
+
+    if include_context:
+        # add context embeddings:
+        m.add_input(name='context_in',
+                    input_shape=(1,),
+                    dtype='int')
+
+        # add contextual embedding layers:
+        m.add_node(Embedding(input_dim=nb_train_tokens,
+                             output_dim=nb_embedding_dims,
+                             weights=pretrained_embeddings,
+                             input_length=nb_context_tokens),
+                       name='context_embedding', input='context_in')
+        m.add_node(Flatten(),
+                       name="context_flatten", input="context_embedding")
+        m.add_node(Dropout(0.5),
+                       name='context_dropout', input='context_flatten')
+        m.add_node(Activation('relu'),
+                       name='context_relu', input='context_dropout')
+        m.add_node(Dense(output_dim=nb_dense_dims),
+                       name="context_dense1", input="context_relu")
+        m.add_node(Dropout(0.5),
+                       name="context_dropout2", input="context_dense1")
+        m.add_node(Activation('relu'),
+                       name='context_out', input='context_dropout2')
+        subnets.append('context_out')
+
+    # combine subnets:
+    if len(subnets) > 1:
+        m.add_node(Activation('linear'),
+                   name='joined',
+                   inputs=subnets,
+                   merge_mode='concat',
+                   concat_axis = -1)
+    else:
+        m.add_node(Activation('linear'),
+                   name='joined',
+                   input=subnets[0])
+
 
     if include_lemma:
         # repeat final input
@@ -124,7 +138,7 @@ def build_model(token_len, token_char_vector_dict,
         m.add_node(Dense(output_dim=nb_tags),
                    name='pos_dense',
                    input='joined')
-        m.add_node(Dropout(0.25),
+        m.add_node(Dropout(0.05),
                     name='pos_dense_dropout',
                     input='pos_dense')
         m.add_node(Activation('softmax'),
@@ -137,7 +151,7 @@ def build_model(token_len, token_char_vector_dict,
         m.add_node(Dense(output_dim=nb_morph_cats),
                    name='morph_dense',
                    input='joined')
-        m.add_node(Dropout(0.25),
+        m.add_node(Dropout(0.05),
                     name='morph_dense_dropout',
                     input='morph_dense')
         m.add_node(Activation('softmax'),

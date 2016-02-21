@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+import numpy as np
 
 from keras.utils import np_utils
 
@@ -23,6 +24,8 @@ class Tagger():
         self.nb_right_tokens = 1
         self.nb_context_tokens = self.nb_left_tokens + self.nb_right_tokens
         self.nb_embedding_dims = 150
+        self.include_token = True
+        self.include_context = True
         self.include_lemma = True
         self.include_pos = True
         self.include_morph = True
@@ -80,6 +83,8 @@ class Tagger():
                                  nb_train_tokens=len(self.train_token_vocab),
                                  nb_context_tokens=self.nb_context_tokens,
                                  pretrained_embeddings=self.pretrained_embeddings,
+                                 include_token=self.include_token,
+                                 include_context=self.include_context,
                                  include_lemma=self.include_lemma,
                                  include_pos=self.include_pos,
                                  include_morph=self.include_morph,
@@ -97,12 +102,14 @@ class Tagger():
         print("-> epoch ", self.nb_epochs, "...")
 
         # update learning rate at specific points:
-        #if self.nb_epochs % 10 == 0:
-        #    self.model.optimizer.lr.set_value(self.model.optimizer.lr.get_value() / 2.0)
+        if self.nb_epochs % 10 == 0:
+            self.model.optimizer.lr.set_value(np.float32(self.model.optimizer.lr.get_value() * 0.33))
         
         # fit on train:
-        d = {'focus_in': self.train_X_focus}
-        if self.nb_context_tokens:
+        d = {}
+        if self.include_token:
+            d['focus_in'] = self.train_X_focus
+        if self.include_context:
             d['context_in'] = self.train_contexts
         if self.include_lemma:
             d['lemma_out'] = self.train_X_lemma
@@ -121,9 +128,11 @@ class Tagger():
         print("\t - total train loss:\t{:.3}".format(train_loss))
 
         # get dev predictions:
-        d = {'focus_in': self.dev_X_focus}
-        if self.nb_context_tokens:
-             d['context_in'] = self.dev_contexts
+        d = {}
+        if self.include_token:
+            d['focus_in'] = self.dev_X_focus
+        if self.include_context:
+            d['context_in'] = self.dev_contexts
 
         preds = self.model.predict(data=d,
                                 batch_size=self.batch_size)
