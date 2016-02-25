@@ -31,6 +31,8 @@ def load_annotated_file(filepath, format, nb_instances=None,
                 try:
                     idx, tok, _, lem, _, pos, morph = \
                         line.split()[:7]
+                    tok = tok.lower()
+                    lem = lem.lower()
                     inst = [tok]
                     if include_lemma:
                         inst.append(lem)

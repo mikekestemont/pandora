@@ -70,10 +70,11 @@ class Pretrainer:
                 self.token_idx[k] = len(self.token_idx)
 
         # create an ordered vocab:
-        self.vocab = [k for k, v in sorted(self.token_idx.items(),\
+        self.train_token_vocab = [k for k, v in sorted(self.token_idx.items(),\
                         key=itemgetter(1))]
+        self.pretrained_embeddings = self.get_weights(self.train_token_vocab)
 
-        return self.get_weights(self.vocab), self.vocab
+        return self
 
     def get_weights(self, vocab):
         unk = np.zeros(self.size)
@@ -103,10 +104,14 @@ class Pretrainer:
                 idxs = [0] + idxs
             ints.extend(idxs)
 
+            # right now: WILL INCLUDE FOCUS TOKEN
             # vectorize right context:
-            right_context_tokens = [tokens[curr_idx+t+1]\
+            #right_context_tokens = [tokens[curr_idx+t+1]\
+            #                            for t in range(self.nb_right_tokens)\
+            #                                if curr_idx+t+1 < len(tokens)]
+            right_context_tokens = [tokens[curr_idx+t]\
                                         for t in range(self.nb_right_tokens)\
-                                            if curr_idx+t+1 < len(tokens)]
+                                            if curr_idx+t < len(tokens)]
             idxs = []
             if right_context_tokens:
                 idxs = [self.token_idx[t] if t in self.token_idx else 0 \
@@ -120,7 +125,7 @@ class Pretrainer:
         return np.asarray(context_ints, dtype='int8')
 
 
-    def plot_mfi(self, outputfile='embeddings.pdf', nb_clusters=8):
+    def plot_mfi(self, outputfile='embeddings.pdf', nb_clusters=8, weights='NA'):
         # collect embeddings for mfi:
         X = np.asarray([self.w2v_model[w] for w in self.mfi \
                             if w in self.w2v_model], dtype='float32')
@@ -138,7 +143,8 @@ class Pretrainer:
         x1, x2 = coor[:,0], coor[:,1]
         ax1.scatter(x1, x2, 100, edgecolors='none', facecolors='none')
         # clustering on top (add some colouring):
-        clustering = AgglomerativeClustering(linkage='ward', affinity='euclidean', n_clusters=nb_clusters)
+        clustering = AgglomerativeClustering(linkage='ward',
+                            affinity='euclidean', n_clusters=nb_clusters)
         clustering.fit(coor)
         # add names:
         for x, y, name, cluster_label in zip(x1, x2, labels, clustering.labels_):
