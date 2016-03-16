@@ -22,8 +22,15 @@ def load_annotated_data(directory, format='conll', nb_instances=None,
     return instances
 
 def load_annotated_file(filepath, format, nb_instances=None,
-                        include_lemma=True, include_morph=True, include_pos=True):
-    instances = []
+                        include_lemma=True, include_morph=True,
+                        include_pos=True):
+    instances = {'token': []}
+    if include_lemma:
+        instances['lemma'] = []
+    if include_pos:
+        instances['pos'] = []
+    if include_morph:
+        instances['morph'] = []
     if format == 'conll':
         for line in codecs.open(filepath, 'r', 'utf8'):
             line = line.strip()
@@ -48,6 +55,33 @@ def load_annotated_file(filepath, format, nb_instances=None,
             if nb_instances:
                 if len(instances) >= nb_instances:
                     break
+    elif format == 'tab':
+        for line in codecs.open(filepath, 'r', 'utf8'):
+            line = line.strip()
+            if line:
+                try:
+                    comps = line.split()
+                    tok = comps[0].lower()
+                    if include_lemma:
+                        lem = comps[1].lower()
+                    if include_pos:
+                        pos = comps[2]
+                    if include_morph:
+                        morph = comps[3].split('|')
+                        morph = '+'.join(sorted(set(morph)))
+                    
+                    instances['token'].append(tok)
+                    if include_lemma:
+                        instances['lemma'].append(lem)
+                    if include_pos:
+                        instances['pos'].append(pos)
+                    if include_morph:
+                        instances['morph'].append(morph)
+                except ValueError:
+                    pass
+            if nb_instances:
+                if len(instances['token']) >= nb_instances:
+                    break
     return instances
 
 def load_raw_file(filepath, nb_instances=1000):
@@ -60,3 +94,13 @@ def load_raw_file(filepath, nb_instances=1000):
         if nb_instances <= 0:
             break
     return instances
+
+def stats(tokens, lemmas, known):
+    print('Nb of tokens:', len(tokens))
+    print('Nb of unique tokens:', len(set(tokens)))
+    cnt = sum([1.0 for k in tokens if k not in known])/len(tokens)
+    cnt *= 100.0
+    print('Nb of unseen tokens:', cnt)
+    print('Nb of unique lemmas: ', len(set(lemmas)))
+
+

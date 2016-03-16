@@ -38,18 +38,16 @@ def build_model(token_len, token_char_vector_dict,
 
             if i == (nb_encoding_layers - 1):
                 output_name = 'final_focus_encoder'
-                m.add_node(LSTM(input_dim=nb_dense_dims,
-                                output_dim=nb_dense_dims * 3,
+                m.add_node(LSTM(output_dim=nb_dense_dims,
                                 return_sequences=False,
                                 activation='tanh'),
                             name=output_name,
                             input=input_name)
             else:
                 output_name = 'encoder_'+str(i + 1)
-                m.add_node(LSTM(input_dim=nb_dense_dims,
-                                output_dim=nb_dense_dims,
-                            return_sequences=True,
-                            activation='tanh'),
+                m.add_node(LSTM(output_dim=nb_dense_dims,
+                                return_sequences=True,
+                                activation='tanh'),
                             name='encoder_'+str(i + 1),
                             input=input_name)
 
@@ -110,12 +108,21 @@ def build_model(token_len, token_char_vector_dict,
             else:
                 output_name = 'decoder_'+str(i + 1)
 
-            m.add_node(LSTM(input_dim=nb_dense_dims,
-                            output_dim=nb_dense_dims,
+            m.add_node(LSTM(output_dim=nb_dense_dims,
                             return_sequences=True,
                             activation='tanh'),
-                        name=output_name,
+                        name='left_lstm_'+str(i + 1),
                         input=input_name)
+            m.add_node(LSTM(output_dim=nb_dense_dims,
+                            return_sequences=True,
+                            activation='tanh',
+                            go_backwards=True),
+                        name='right_lstm_'+str(i + 1),
+                        input=input_name)
+            m.add_node(Activation('linear'),
+                        name=output_name,
+                        inputs=['left_lstm_'+str(i + 1), 'right_lstm_'+str(i + 1)],
+                        merge_mode='sum')
 
         # add lemma decoder
         m.add_node(TimeDistributedDense(output_dim=len(lemma_char_vector_dict)),
@@ -166,15 +173,18 @@ def build_model(token_len, token_char_vector_dict,
                     input='morph_dense_dropout')
         m.add_output(name='morph_out', input='morph_softmax')
     
+    from keras.objectives import categorical_crossentropy
+
     loss_dict = {}
+    
     if include_lemma:
         loss_dict['lemma_out'] = 'categorical_crossentropy'
     if include_pos:
-        loss_dict['pos_out'] = 'categorical_crossentropy'
+        #loss_dict['pos_out'] = 'categorical_crossentropy'
+        loss_dict['pos_out'] = lambda x, y: 0.2 * categorical_crossentropy(x, y)
     if include_morph:
         loss_dict['morph_out'] = 'categorical_crossentropy'
 
-    #m.compile(optimizer='RMSprop', loss=loss_dict)
-    m.compile(optimizer='SGD', loss=loss_dict)
+    m.compile(optimizer='RMSprop', loss=loss_dict)
 
     return m

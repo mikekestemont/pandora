@@ -12,8 +12,9 @@ import numpy as np
 from model import build_model
 
 def index_characters(tokens):
-    tokens = tokens + ('$',) # add end of token symbol
-    char_vocab = tuple({ch for tok in tokens for ch in tok})
+    vocab = {ch for tok in tokens for ch in tok}
+    vocab = vocab.union({'$', '|'})
+    char_vocab = tuple(sorted(vocab))
     char_vector_dict, char_idx = {}, {}
     filler = np.zeros(len(char_vocab), dtype='float32')
 
@@ -51,12 +52,13 @@ def vectorize_lemmas(lemmas, char_vector_dict,
 
 def vectorize_token(seq, char_vector_dict, max_len):
     # cut, if needed:
-    seq = seq[:max_len]
-    seq = seq[::-1] # reverse order (cf. paper)!
+    seq = seq[:(max_len - 1)]
+    seq += '|'
 
-    # pad, if needed:
     while len(seq) < max_len:
-        seq = '$'+seq
+        seq = seq + '$'
+
+    seq = seq[::-1] # reverse order (cf. paper)!
 
     seq_X = []
     filler = np.zeros(len(char_vector_dict), dtype='float32')
@@ -70,7 +72,8 @@ def vectorize_token(seq, char_vector_dict, max_len):
 
 def vectorize_lemma(seq, char_vector_dict, max_len):
     # cut, if needed:
-    seq = seq[:max_len]
+    seq = seq[:(max_len - 1)]
+    seq += '|'
     # pad, if needed:
     while len(seq) < max_len:
         seq += '$'
@@ -107,25 +110,27 @@ class Preprocessor():
 
     def fit(self, tokens, lemmas, pos, morph):
         # fit focus tokens:
-        self.max_token_len = len(max(lemmas, key=len))
+        self.max_token_len = len(max(tokens, key=len))+1
         self.token_char_dict, self.token_char_idx = \
             index_characters(tokens)
-
+        self.known_tokens = set(tokens)
+        
         # fit lemmas:
-        self.max_lemma_len = len(max(tokens, key=len))
-        self.lemma_char_dict, self.lemma_char_idx = \
-            index_characters(lemmas)
+        if lemmas:
+            self.max_lemma_len = len(max(lemmas, key=len))+1
+            self.lemma_char_dict, self.lemma_char_idx = \
+                index_characters(lemmas)
+            self.known_lemmas = set(lemmas)
 
         # fit pos labels:
-        self.pos_encoder = LabelEncoder()
-        self.pos_encoder.fit(pos+('<UNK>',)) # do we need this?
+        if pos:
+            self.pos_encoder = LabelEncoder()
+            self.pos_encoder.fit(pos + ['<UNK>']) # do we need this?
 
-        # fit idx for 'known' tokens and lemmas:
-        self.known_tokens = set(tokens)
-        self.known_lemmas = set(lemmas)
-
-        self.morph_encoder = LabelEncoder()
-        self.morph_encoder.fit(morph+('<UNK>',))
+        # fit morph tags:
+        if morph:
+            self.morph_encoder = LabelEncoder()
+            self.morph_encoder.fit(morph + ['<UNK>'])
 
         """ legacy:
         # fit morph analysis:
@@ -152,7 +157,7 @@ class Preprocessor():
                     tokens=tokens,
                     char_vector_dict=self.token_char_dict,
                     max_len=self.max_token_len)
-        returnables = [X_focus]
+        returnables = {'X_focus': X_focus}
 
         if lemmas:
             # vectorize lemmas:
@@ -160,25 +165,26 @@ class Preprocessor():
                         lemmas=lemmas,
                         char_vector_dict=self.lemma_char_dict,
                         max_len=self.max_lemma_len)
-            returnables.append(X_lemma)
+            returnables['X_lemma'] = X_lemma
 
         if pos:
             # vectorize pos:
-            pos = [p if p in self.pos_encoder.classes_\
+            pos = [p if p in self.pos_encoder.classes_ \
                         else '<UNK>' for p in pos] # do we need this?
             pos = self.pos_encoder.transform(pos)
             
             X_pos = np_utils.to_categorical(pos,
                         nb_classes=len(self.pos_encoder.classes_))
-            returnables.append(X_pos)
+            returnables['X_pos'] = X_pos
 
         if morph:
-            morph = [m if m in self.morph_encoder.classes_\
+            morph = [m if m in self.morph_encoder.classes_ \
                         else '<UNK>' for m in morph] # do we need this?
             morph = self.morph_encoder.transform(morph)
             X_morph = np_utils.to_categorical(morph,
                         nb_classes=len(self.morph_encoder.classes_))
-            returnables.append(X_morph)
+            returnables['X_morph'] = X_morph
+
             """ legacy:
             # vectorize morph:
             morph_dicts = parse_morphs(morph)
@@ -186,10 +192,7 @@ class Preprocessor():
             
             """
 
-        if len(returnables) > 1:
-            return returnables
-        else:
-            return returnables[0]
+        return returnables
 
     def fit_transform(self, tokens, lemmas, pos, morph):
         self.fit(tokens, lemmas, pos, morph)
@@ -209,7 +212,7 @@ class Preprocessor():
             for positions in pred:
                 top_idx = np.argmax(positions) # winning position
                 c = self.lemma_char_idx[top_idx] # look up corresponding char
-                if c == '$':
+                if c in ('|', '$'):
                     break
                 else:
                     pred_lem += c # add character
