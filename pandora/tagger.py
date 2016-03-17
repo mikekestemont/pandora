@@ -48,7 +48,13 @@ class Tagger():
                     include_lemma = True,
                     include_pos = True,
                     include_morph = True,
-                    complex_pos = False):
+                    include_dev = True,
+                    include_test = True,
+                    nb_filters = 100,
+                    filter_length = 3,
+                    focus_repr = 'recurrent',
+                    dropout_level = .1,
+                    ):
 
         # set hyperparameters:
         self.nb_encoding_layers = nb_encoding_layers
@@ -60,6 +66,10 @@ class Tagger():
         self.nb_embedding_dims = nb_embedding_dims
         self.model_name = model_name
         self.postcorrect = postcorrect
+        self.nb_filters = nb_filters
+        self.filter_length = filter_length
+        self.focus_repr = focus_repr
+        self.dropout_level = dropout_level
 
         # which subnets?
         self.include_token = include_token
@@ -70,51 +80,59 @@ class Tagger():
         self.include_pos = include_pos
         self.include_morph = include_morph
 
-        self.complex_pos = complex_pos
+        # include dev and/or test?
+        self.include_dev = include_dev
+        self.include_test = include_test
         
         # initialize:
         self.setup = False
         self.nb_epochs = 0
 
-    def setup_(self, train_data, test_data, load_pickles=False):
+    def setup_(self, train_data=None, dev_data=None, test_data=None, load_pickles=False):
         # create a model directory:
         self.model_path = os.sep.join((MODELS_DIR, self.model_name))
         if os.path.isdir(self.model_path):
             shutil.rmtree(self.model_path)
         os.mkdir(self.model_path)
 
-        self.train_tokens, self.test_tokens = None, None
-        self.train_lemmas, self.test_lemmas = None, None
-        self.train_pos, self.test_pos = None, None
-        self.train_morph, self.test_morph = None, None
+        self.train_tokens, self.dev_tokens, self.test_tokens = None, None, None
+        self.train_lemmas, self.dev_lemmas, self.test_lemmas = None, None, None
+        self.train_pos, self.dev_pos, self.test_pos = None, None, None
+        self.train_morph, self.dev_morph, self.test_morph = None, None, None
 
         self.train_tokens = train_data['token']
-        self.test_tokens = test_data['token']
+        if self.include_test:
+            self.test_tokens = test_data['token']
+        if self.include_dev:
+            self.dev_tokens = dev_data['token']
+
         if self.include_lemma:
             self.train_lemmas = train_data['lemma']
-            self.test_lemmas = test_data['lemma']
             self.known_lemmas = set(self.train_lemmas)
+            if self.include_dev:
+                self.dev_lemmas = dev_data['lemma']            
+            if self.include_test:
+                self.test_lemmas = test_data['lemma']
+            
         if self.include_pos:
             self.train_pos = train_data['pos']
-            self.test_pos = test_data['pos']
+            if self.include_dev:
+                self.dev_pos = dev_data['pos']
+            if self.include_test:
+                self.test_pos = test_data['pos']
         if self.include_morph:
             self.train_morph = train_data['morph']
-            self.test_morph = test_data['morph']
-
-        if self.complex_pos:
-            self.train_pos = tuple('-'.join(i) for i in zip(self.train_pos, self.train_morph))
-            #self.dev_pos = tuple('-'.join(i) for i in zip(self.dev_pos, self.dev_morph))
-            self.test_pos = tuple('-'.join(i) for i in zip(self.test_pos, self.test_morph))
-
-        print(len(self.train_tokens), '+++')
-        print(len(self.train_lemmas), '!!!')
-        print(len(self.train_pos), '!!!')
+            if self.include_dev:
+                self.dev_morph = dev_data['morph']
+            if self.include_test:
+                self.test_morph = test_data['morph']
 
         if not load_pickles:
             self.preprocessor = Preprocessor().fit(tokens=self.train_tokens,
                                                    lemmas=self.train_lemmas,
                                                    pos=self.train_pos,
-                                                   morph=self.train_morph)
+                                                   morph=self.train_morph,
+                                                   include_lemma=self.include_lemma)
             self.pretrainer = Pretrainer(nb_left_tokens=self.nb_left_tokens,
                                          nb_right_tokens=self.nb_right_tokens,
                                          size=self.nb_embedding_dims)
@@ -126,34 +144,53 @@ class Tagger():
             self.pretrainer = pickle.load(open(os.sep.join((self.model_path, \
                                     'pretrainer.p')), 'rb'))
 
-        print(len(self.train_tokens), '!!!')
-        print(len(self.train_lemmas), '!!!')
-        print(len(self.train_pos), '!!!')
-        print(len(self.train_morph), 'yyyy')
-
         train_transformed = self.preprocessor.transform(tokens=self.train_tokens,
                                                lemmas=self.train_lemmas,
                                                pos=self.train_pos,
                                                morph=self.train_morph)
-        test_transformed = self.preprocessor.transform(tokens=self.test_tokens,
+        if self.include_dev:
+            dev_transformed = self.preprocessor.transform(tokens=self.dev_tokens,
+                                        lemmas=self.dev_lemmas,
+                                        pos=self.dev_pos,
+                                        morph=self.dev_morph)
+        if self.include_test:
+            test_transformed = self.preprocessor.transform(tokens=self.test_tokens,
                                         lemmas=self.test_lemmas,
                                         pos=self.test_pos,
                                         morph=self.test_morph)
 
         self.train_X_focus = train_transformed['X_focus']
-        self.test_X_focus = test_transformed['X_focus']
+        if self.include_dev:
+            self.dev_X_focus = dev_transformed['X_focus']
+        if self.include_test:
+            self.test_X_focus = test_transformed['X_focus']
+
         if self.include_lemma:
             self.train_X_lemma = train_transformed['X_lemma']
-            self.test_X_lemma = test_transformed['X_lemma']
+            if self.include_dev:
+                self.dev_X_lemma = dev_transformed['X_lemma']
+            if self.include_test:
+                self.test_X_lemma = test_transformed['X_lemma']
+
         if self.include_pos:
             self.train_X_pos = train_transformed['X_pos']
-            self.test_X_pos = test_transformed['X_pos']
+            if self.include_dev:
+                self.dev_X_pos = dev_transformed['X_pos']
+            if self.include_test:
+                self.test_X_pos = test_transformed['X_pos']
+
         if self.include_morph:
             self.train_X_morph = train_transformed['X_morph']
-            self.test_X_morph = test_transformed['X_morph']
+            if self.include_dev:
+                self.dev_X_morph = dev_transformed['X_morph']
+            if self.include_test:
+                self.test_X_morph = test_transformed['X_morph']
 
         self.train_contexts = self.pretrainer.transform(tokens=self.train_tokens)
-        self.test_contexts = self.pretrainer.transform(tokens=self.test_tokens)
+        if self.include_dev:
+            self.dev_contexts = self.pretrainer.transform(tokens=self.dev_tokens)
+        if self.include_test:
+            self.test_contexts = self.pretrainer.transform(tokens=self.test_tokens)
 
         #self.print_stats()
         
@@ -170,7 +207,7 @@ class Tagger():
                 pass
             nb_morph_cats = None
             try:
-                nb_morph_cats = len(self.preprocessor.morph_encoder.classes_)
+                nb_morph_cats = self.preprocessor.nb_morph_cats
             except AttributeError:
                 pass
             max_token_len, token_char_dict = None, None
@@ -183,6 +220,11 @@ class Tagger():
             try:
                 max_lemma_len = self.preprocessor.max_lemma_len
                 lemma_char_dict = self.preprocessor.lemma_char_dict
+            except AttributeError:
+                pass
+            nb_lemmas = None
+            try:
+                nb_lemmas = len(self.preprocessor.lemma_encoder.classes_)
             except AttributeError:
                 pass
             self.model = build_model(token_len=max_token_len,
@@ -202,6 +244,11 @@ class Tagger():
                                  include_lemma=self.include_lemma,
                                  include_pos=self.include_pos,
                                  include_morph=self.include_morph,
+                                 nb_filters = self.nb_filters,
+                                 filter_length = self.filter_length,
+                                 focus_repr = self.focus_repr,
+                                 dropout_level = self.dropout_level,
+                                 nb_lemmas = nb_lemmas,
                                 )
         self.save()
         self.setup = True
@@ -213,6 +260,9 @@ class Tagger():
         utils.stats(tokens=self.test_tokens, lemmas=self.test_lemmas, known=self.preprocessor.known_tokens)
 
     def test(self):
+        if not self.include_test:
+            raise ValueError('Please do not call .test() if no test data is available.')
+
         # get test predictions:
         d = {}
         if self.include_token:
@@ -247,11 +297,12 @@ class Tagger():
         if self.include_morph:     
             print('::: Test scores (morph) :::')
             pred_morph = self.preprocessor.inverse_transform_morph(predictions=test_preds['morph_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.test_morph,
+            all_acc, kno_acc, unk_acc = evaluation.multilabel_accuracies(gold=self.test_morph,
                                                  silver=pred_morph,
                                                  test_tokens=self.test_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
 
+        """
         ##### OUT #######################################################################################
         if self.include_lemma and not self.include_pos:
             with codecs.open(os.sep.join((self.model_path, 'test_out.txt')), 'w', 'utf8') as f:
@@ -283,6 +334,7 @@ class Tagger():
                         f.write('\t'.join([str(r) for r in p]) + '\n')
                     except:
                         pass
+        """
         return
 
     def save(self):
@@ -345,11 +397,6 @@ class Tagger():
             new_lr = np.float32(old_lr * 0.5)
             self.model.optimizer.lr.set_value(new_lr)
             print('\t- Lowering learning rate > was:', old_lr, ', now:', new_lr)
-        
-        print(self.train_X_focus.shape)
-        print(self.train_contexts.shape)
-        print(self.train_X_lemma.shape)
-        print(self.train_X_pos.shape)
 
         # fit on train:
         full_train_d = {}
@@ -378,17 +425,16 @@ class Tagger():
         train_preds = self.model.predict(data=full_train_d,
                                 batch_size=self.batch_size)
 
-        """
-        # get dev predictions:
-        d = {}
-        if self.include_token:
-            d['focus_in'] = self.dev_X_focus
-        if self.include_context:
-            d['context_in'] = self.dev_contexts
+        if self.include_dev:
+            # get dev predictions:
+            d = {}
+            if self.include_token:
+                d['focus_in'] = self.dev_X_focus
+            if self.include_context:
+                d['context_in'] = self.dev_contexts
 
-        dev_preds = self.model.predict(data=d,
-                                batch_size=self.batch_size)
-        """
+            dev_preds = self.model.predict(data=d,
+                                    batch_size=self.batch_size)
 
         if self.include_lemma:
             print('::: Train scores (lemmas) :::')
@@ -397,14 +443,18 @@ class Tagger():
                                                  silver=pred_lemmas,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
-            """
-            print('::: Dev scores (lemmas) :::')
-            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=dev_preds['lemma_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_lemmas,
-                                                 silver=pred_lemmas,
-                                                 test_tokens=self.dev_tokens,
-                                                 known_tokens=self.preprocessor.known_tokens)
-            """
+            if self.include_dev:
+                print('::: Dev scores (lemmas) :::')
+                pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=dev_preds['lemma_out'])
+                if self.postcorrect:
+                    for i in range(len(pred_lemmas)):
+                        if pred_lemmas[i] not in self.known_lemmas:
+                            pred_lemmas[i] = min(self.known_lemmas,
+                                            key=lambda x: editdistance.eval(x, pred_lemmas[i]))
+                all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_lemmas,
+                                                     silver=pred_lemmas,
+                                                     test_tokens=self.dev_tokens,
+                                                     known_tokens=self.preprocessor.known_tokens)
 
         if self.include_pos:
             print('::: Train scores (pos) :::')
@@ -413,24 +463,30 @@ class Tagger():
                                                  silver=pred_pos,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
-            """
-            print('::: Dev scores (pos) :::')
-            pred_pos = self.preprocessor.inverse_transform_pos(predictions=dev_preds['pos_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_pos,
-                                                 silver=pred_pos,
-                                                 test_tokens=self.dev_tokens,
-                                                 known_tokens=self.preprocessor.known_tokens)
-            """
+            if self.include_dev:
+                print('::: Dev scores (pos) :::')
+                pred_pos = self.preprocessor.inverse_transform_pos(predictions=dev_preds['pos_out'])
+                all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_pos,
+                                                     silver=pred_pos,
+                                                     test_tokens=self.dev_tokens,
+                                                     known_tokens=self.preprocessor.known_tokens)
         
         if self.include_morph:
-            print('::: Dev scores (morph) :::')
-            """
-            pred_morph = self.preprocessor.inverse_transform_morph(predictions=dev_preds['morph_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_morph,
+            print('::: Train scores (morph) :::')
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=train_preds['morph_out'])
+            all_acc, kno_acc, unk_acc = evaluation.multilabel_accuracies(gold=self.train_morph,
                                                  silver=pred_morph,
-                                                 test_tokens=self.dev_tokens,
+                                                 test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
-            """
+
+            if self.include_dev:
+                print('::: Dev scores (morph) :::')
+                pred_morph = self.preprocessor.inverse_transform_morph(predictions=dev_preds['morph_out'])
+                all_acc, kno_acc, unk_acc = evaluation.multilabel_accuracies(gold=self.train_morph,
+                                                     silver=pred_morph,
+                                                     test_tokens=self.dev_tokens,
+                                                     known_tokens=self.preprocessor.known_tokens)
+
 
         
 

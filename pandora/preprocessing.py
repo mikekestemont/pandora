@@ -108,7 +108,7 @@ class Preprocessor():
     def __init__(self):
         pass
 
-    def fit(self, tokens, lemmas, pos, morph):
+    def fit(self, tokens, lemmas, pos, morph, include_lemma):
         # fit focus tokens:
         self.max_token_len = len(max(tokens, key=len))+1
         self.token_char_dict, self.token_char_idx = \
@@ -117,36 +117,42 @@ class Preprocessor():
         
         # fit lemmas:
         if lemmas:
-            self.max_lemma_len = len(max(lemmas, key=len))+1
-            self.lemma_char_dict, self.lemma_char_idx = \
-                index_characters(lemmas)
+            self.include_lemma = include_lemma
             self.known_lemmas = set(lemmas)
+            if include_lemma == 'generate':
+                self.max_lemma_len = len(max(lemmas, key=len))+1
+                self.lemma_char_dict, self.lemma_char_idx = \
+                    index_characters(lemmas)
+            elif include_lemma == 'label':
+                self.lemma_encoder = LabelEncoder()
+                self.lemma_encoder.fit(lemmas + ['<UNK>']) # do we need this?
 
         # fit pos labels:
         if pos:
             self.pos_encoder = LabelEncoder()
             self.pos_encoder.fit(pos + ['<UNK>']) # do we need this?
 
+        """ legacy:
         # fit morph tags:
         if morph:
             self.morph_encoder = LabelEncoder()
             self.morph_encoder.fit(morph + ['<UNK>'])
-
-        """ legacy:
-        # fit morph analysis:
-        morph_dicts = parse_morphs(morph)
-        self.morph_encoder = DictVectorizer(sparse=False)
-        self.morph_encoder.fit(morph_dicts)
-
-        self.morph_idxs = {}
-        for i, feat_name in enumerate(self.morph_encoder.feature_names_):
-            label, _ = feat_name.strip().split('=')
-            try:
-                self.morph_idxs[label].add(i)
-            except KeyError:
-                self.morph_idxs[label] = set()
-                self.morph_idxs[label].add(i)
         """
+        
+        if morph:
+            # fit morph analysis:
+            morph_dicts = parse_morphs(morph)
+            self.morph_encoder = DictVectorizer(sparse=False)
+            self.morph_encoder.fit(morph_dicts)
+            self.nb_morph_cats = len(self.morph_encoder.feature_names_)
+            self.morph_idxs = {}
+            for i, feat_name in enumerate(self.morph_encoder.feature_names_):
+                label, _ = feat_name.strip().split('=')
+                try:
+                    self.morph_idxs[label].add(i)
+                except KeyError:
+                    self.morph_idxs[label] = set()
+                    self.morph_idxs[label].add(i)
         
         return self
 
@@ -159,18 +165,28 @@ class Preprocessor():
                     max_len=self.max_token_len)
         returnables = {'X_focus': X_focus}
 
-        if lemmas:
-            # vectorize lemmas:
-            X_lemma = vectorize_lemmas(\
-                        lemmas=lemmas,
-                        char_vector_dict=self.lemma_char_dict,
-                        max_len=self.max_lemma_len)
+        if lemmas and self.include_lemma:
+            if self.include_lemma == 'generate':
+                # vectorize lemmas:
+                X_lemma = vectorize_lemmas(\
+                            lemmas=lemmas,
+                            char_vector_dict=self.lemma_char_dict,
+                            max_len=self.max_lemma_len)
+
+            elif self.include_lemma == 'label':
+                lemmas = [l if l in self.lemma_encoder.classes_ \
+                        else '<UNK>' for l in lemmas]
+                lemmas = self.lemma_encoder.transform(lemmas)
+            
+                X_lemma = np_utils.to_categorical(lemmas,
+                        nb_classes=len(self.lemma_encoder.classes_))
+
             returnables['X_lemma'] = X_lemma
 
         if pos:
             # vectorize pos:
             pos = [p if p in self.pos_encoder.classes_ \
-                        else '<UNK>' for p in pos] # do we need this?
+                        else '<UNK>' for p in pos]
             pos = self.pos_encoder.transform(pos)
             
             X_pos = np_utils.to_categorical(pos,
@@ -178,19 +194,19 @@ class Preprocessor():
             returnables['X_pos'] = X_pos
 
         if morph:
+            """
             morph = [m if m in self.morph_encoder.classes_ \
                         else '<UNK>' for m in morph] # do we need this?
             morph = self.morph_encoder.transform(morph)
             X_morph = np_utils.to_categorical(morph,
                         nb_classes=len(self.morph_encoder.classes_))
             returnables['X_morph'] = X_morph
+            """
 
-            """ legacy:
             # vectorize morph:
             morph_dicts = parse_morphs(morph)
             X_morph = self.morph_encoder.transform(morph_dicts)
-            
-            """
+            returnables['X_morph'] = X_morph
 
         return returnables
 
@@ -207,16 +223,21 @@ class Preprocessor():
         """
         pred_lemmas = []
 
-        for pred in predictions:
-            pred_lem = ''
-            for positions in pred:
-                top_idx = np.argmax(positions) # winning position
-                c = self.lemma_char_idx[top_idx] # look up corresponding char
-                if c in ('|', '$'):
-                    break
-                else:
-                    pred_lem += c # add character
-            pred_lemmas.append(pred_lem)
+        if self.include_lemma == 'generate':
+            for pred in predictions:
+                pred_lem = ''
+                for positions in pred:
+                    top_idx = np.argmax(positions) # winning position
+                    c = self.lemma_char_idx[top_idx] # look up corresponding char
+                    if c in ('|', '$'):
+                        break
+                    else:
+                        pred_lem += c # add character
+                pred_lemmas.append(pred_lem)
+
+        elif self.include_lemma == 'label':
+            predictions = np.argmax(predictions, axis=1)
+            pred_lemmas = self.lemma_encoder.inverse_transform(predictions)    
         
         return pred_lemmas
 
@@ -226,15 +247,15 @@ class Preprocessor():
         predictions = np.argmax(predictions, axis=1)
         return self.pos_encoder.inverse_transform(predictions)
 
-    def inverse_transform_morph(self, predictions, threshold=1.0):
+    def inverse_transform_morph(self, predictions, threshold=.5):
         """
         Only select highest activation per category, if that max
         is above threshold.
         """
+        """
         predictions = np.argmax(predictions, axis=1)
         return self.morph_encoder.inverse_transform(predictions)
-
-        """ legacy:
+        """
         morphs = []
         for pred in predictions:
             m = []
@@ -243,11 +264,10 @@ class Preprocessor():
                 max_score = max(scores, key=itemgetter(0))
                 if max_score[0] >= threshold:
                     m.append(self.morph_encoder.feature_names_[max_score[1]])
-            print(m)
+            #print(m)
             if m:
                 morphs.append(m)
             else:
                 morphs.append(['_'])
-        """
         return morphs
         

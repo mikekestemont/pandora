@@ -39,17 +39,18 @@ def load_annotated_file(filepath, format, nb_instances=None,
                     idx, tok, _, lem, _, pos, morph = \
                         line.split()[:7]
                     tok = tok.lower()
-                    lem = lem.lower()
-                    inst = [tok]
                     if include_lemma:
-                        inst.append(lem)
-                    if include_pos:
-                        inst.append(pos)
+                        lem = lem.lower()
                     if include_morph:
                         morph = morph.split('|')
-                        morph = '+'.join(sorted(set(morph)))
-                        inst.append(morph)
-                    instances.append(tuple(inst))
+                    
+                    instances['token'].append(tok)
+                    if include_lemma:
+                        instances['lemma'].append(lem)
+                    if include_pos:
+                        instances['pos'].append(pos)
+                    if include_morph:
+                        instances['morph'].append(morph)
                 except ValueError:
                     pass
             if nb_instances:
@@ -68,7 +69,7 @@ def load_annotated_file(filepath, format, nb_instances=None,
                         pos = comps[2]
                     if include_morph:
                         morph = comps[3].split('|')
-                        morph = '+'.join(sorted(set(morph)))
+                        #morph = '+'.join(sorted(set(morph)))
                     
                     instances['token'].append(tok)
                     if include_lemma:

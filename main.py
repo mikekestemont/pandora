@@ -14,28 +14,33 @@ def main():
     batch_size = 100
     nb_left_tokens = 2
     nb_right_tokens = 2
-    nb_embedding_dims = 100
+    nb_embedding_dims = 150
     model_name = 'new'
     postcorrect = True
     include_token = True
     include_context = True
-    include_lemma = True
+    include_lemma = 'generate' # or None, or 'generate'
     include_pos = True
     include_morph = True
-    complex_pos = False
+    include_dev = False
+    include_test = True
+    nb_filters = 100
+    filter_length = 3
+    focus_repr = 'recurrent'
+    dropout_level = .1
 
     train_data = pandora.utils.load_annotated_file('data/capitula/train0.tsv',
                                             format='tab',
                                             include_pos=include_pos,
                                             include_lemma=include_lemma,
                                             include_morph=include_morph,
-                                            nb_instances=5000)
+                                            nb_instances=10000000000000000)
     test_data = pandora.utils.load_annotated_file('data/capitula/test0.tsv',
                                             format='tab',
                                             include_pos=include_pos,
                                             include_lemma=include_lemma,
                                             include_morph=include_morph,
-                                            nb_instances=1000)
+                                            nb_instances=10000000000000000)
     
     tagger = Tagger(nb_encoding_layers = nb_encoding_layers,
                     nb_dense_dims = nb_dense_dims,
@@ -50,17 +55,21 @@ def main():
                     include_lemma = include_lemma,
                     include_pos = include_pos,
                     include_morph = include_morph,
-                    complex_pos = complex_pos)
+                    include_dev = include_dev,
+                    include_test = include_test,
+                    nb_filters = nb_filters,
+                    filter_length = filter_length,
+                    focus_repr = focus_repr,
+                    dropout_level = dropout_level,
+                    )
 
-    for items in train_data:
-        print(len(train_data[items]))
     tagger.setup_(train_data=train_data,
                   test_data=test_data,
                   load_pickles=False)
 
     for i in range(100):
         tagger.epoch()
-        tagger.test()
+        #tagger.test()
     
     print('::: ended :::')
 
