@@ -262,7 +262,8 @@ def build_model(token_len, token_char_vector_dict,
     if include_lemma:
         loss_dict['lemma_out'] = 'categorical_crossentropy'
     if include_pos:
-        loss_dict['pos_out'] = lambda x, y: pos_weight_ * categorical_crossentropy(x, y)
+        #loss_dict['pos_out'] = lambda x, y: pos_weight_ * categorical_crossentropy(x, y)
+        loss_dict['pos_out'] = 'categorical_crossentropy'
     if include_morph:
         loss_dict['morph_out'] = 'binary_crossentropy'
 

@@ -52,14 +52,15 @@ def multilabel_accuracies(gold, silver, test_tokens, known_tokens,
     nb_kno, nb_unk = 0.0, 0.0
 
     for gold_pred, silver_pred, tok in zip(gold, silver, test_tokens):
-
+        gold_pred = set(gold_pred.split('|'))
+        silver_pred = set(silver_pred.split('|'))
         if tok in known_tokens:
             nb_kno += 1
-            if set(gold_pred) == set(silver_pred):
+            if gold_pred == silver_pred:
                 kno_corr += 1
         else:
             nb_unk += 1
-            if set(gold_pred) == set(silver_pred):
+            if gold_pred == silver_pred:
                 unk_corr += 1
 
     all_acc = (kno_corr + unk_corr) / (nb_kno + nb_unk)

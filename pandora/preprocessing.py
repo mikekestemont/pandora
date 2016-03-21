@@ -12,7 +12,7 @@ import numpy as np
 from model import build_model
 
 def index_characters(tokens):
-    vocab = {ch for tok in tokens for ch in tok}
+    vocab = {ch for tok in tokens for ch in tok.lower()}
     vocab = vocab.union({'$', '|'})
     char_vocab = tuple(sorted(vocab))
     char_vector_dict, char_idx = {}, {}
@@ -30,6 +30,7 @@ def vectorize_tokens(tokens, char_vector_dict,
                      max_len=15):
     X = []
     for token in tokens:
+        token = token.lower()
         x = vectorize_token(seq=token,
                             char_vector_dict=char_vector_dict,
                             max_len=max_len)
@@ -42,6 +43,7 @@ def vectorize_lemmas(lemmas, char_vector_dict,
                      max_len=15):
     X = []
     for lemma in lemmas:
+        lemma = lemma.lower()
         x = vectorize_lemma(seq=lemma,
                             char_vector_dict=char_vector_dict,
                             max_len=max_len)
@@ -94,7 +96,7 @@ def parse_morphs(morph):
     for ml in morph:
         d = {}
         try:
-            for a in ml:
+            for a in ml.split('|'):
                 k, v = a.split('=')
                 d[k] = v
         except ValueError:
@@ -156,7 +158,7 @@ class Preprocessor():
         
         return self
 
-    def transform(self, tokens, lemmas=None,
+    def transform(self, tokens=None, lemmas=None,
                   pos=None, morph=None):
         # vectorize focus tokens:
         X_focus = vectorize_tokens(\
@@ -194,15 +196,6 @@ class Preprocessor():
             returnables['X_pos'] = X_pos
 
         if morph:
-            """
-            morph = [m if m in self.morph_encoder.classes_ \
-                        else '<UNK>' for m in morph] # do we need this?
-            morph = self.morph_encoder.transform(morph)
-            X_morph = np_utils.to_categorical(morph,
-                        nb_classes=len(self.morph_encoder.classes_))
-            returnables['X_morph'] = X_morph
-            """
-
             # vectorize morph:
             morph_dicts = parse_morphs(morph)
             X_morph = self.morph_encoder.transform(morph_dicts)
@@ -252,10 +245,6 @@ class Preprocessor():
         Only select highest activation per category, if that max
         is above threshold.
         """
-        """
-        predictions = np.argmax(predictions, axis=1)
-        return self.morph_encoder.inverse_transform(predictions)
-        """
         morphs = []
         for pred in predictions:
             m = []
@@ -264,10 +253,9 @@ class Preprocessor():
                 max_score = max(scores, key=itemgetter(0))
                 if max_score[0] >= threshold:
                     m.append(self.morph_encoder.feature_names_[max_score[1]])
-            #print(m)
             if m:
-                morphs.append(m)
+                morphs.append('|'.join(sorted(set(m))))
             else:
-                morphs.append(['_'])
+                morphs.append('_')
         return morphs
         

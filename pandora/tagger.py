@@ -28,10 +28,6 @@ from model import build_model
 from preprocessing import Preprocessor
 from pretraining import Pretrainer
 
-MODELS_DIR = 'models'
-if not os.path.isdir(MODELS_DIR):
-    os.mkdir(MODELS_DIR)
-
 
 class Tagger():
 
@@ -88,24 +84,43 @@ class Tagger():
         self.setup = False
         self.nb_epochs = 0
 
-    def setup_(self, train_data=None, dev_data=None, test_data=None, load_pickles=False):
-        # create a model directory:
+        # initialize paths:
+        # create a models directory:
+        MODELS_DIR = 'models'
+        if not os.path.isdir(MODELS_DIR):
+            os.mkdir(MODELS_DIR)
         self.model_path = os.sep.join((MODELS_DIR, self.model_name))
-        if os.path.isdir(self.model_path):
-            shutil.rmtree(self.model_path)
-        os.mkdir(self.model_path)
 
         self.train_tokens, self.dev_tokens, self.test_tokens = None, None, None
         self.train_lemmas, self.dev_lemmas, self.test_lemmas = None, None, None
         self.train_pos, self.dev_pos, self.test_pos = None, None, None
         self.train_morph, self.dev_morph, self.test_morph = None, None, None
 
+    def load(self):
+        print('Re-loading preprocessor...')
+        self.preprocessor = pickle.load(open(os.sep.join((self.model_path, \
+                                    'preprocessor.p')), 'rb'))
+        print('Re-loading pretrainer...')
+        self.pretrainer = pickle.load(open(os.sep.join((self.model_path, \
+                                    'pretrainer.p')), 'rb'))
+        print('Re-building model...')
+        self.model = model_from_json(open(os.sep.join((self.model_path, 'model_architecture.json'))).read())
+        self.model.load_weights(os.sep.join((self.model_path, 'model_weights.hdf5')))
+        print('Loading known lemmas...')
+        self.known_lemmas = pickle.load(open(os.sep.join((self.model_path, \
+                                    'known_lemmas.p')), 'rb'))
+
+    def setup_to_train(self, train_data=None, dev_data=None, test_data=None):
+        # create a model directory:
+        if os.path.isdir(self.model_path):
+            shutil.rmtree(self.model_path)
+        os.mkdir(self.model_path)
+
         self.train_tokens = train_data['token']
         if self.include_test:
             self.test_tokens = test_data['token']
         if self.include_dev:
             self.dev_tokens = dev_data['token']
-
         if self.include_lemma:
             self.train_lemmas = train_data['lemma']
             self.known_lemmas = set(self.train_lemmas)
@@ -113,7 +128,6 @@ class Tagger():
                 self.dev_lemmas = dev_data['lemma']            
             if self.include_test:
                 self.test_lemmas = test_data['lemma']
-            
         if self.include_pos:
             self.train_pos = train_data['pos']
             if self.include_dev:
@@ -127,22 +141,15 @@ class Tagger():
             if self.include_test:
                 self.test_morph = test_data['morph']
 
-        if not load_pickles:
-            self.preprocessor = Preprocessor().fit(tokens=self.train_tokens,
-                                                   lemmas=self.train_lemmas,
-                                                   pos=self.train_pos,
-                                                   morph=self.train_morph,
-                                                   include_lemma=self.include_lemma)
-            self.pretrainer = Pretrainer(nb_left_tokens=self.nb_left_tokens,
-                                         nb_right_tokens=self.nb_right_tokens,
-                                         size=self.nb_embedding_dims)
-            self.pretrainer.fit(tokens=self.train_tokens)
-                
-        else:
-            self.preprocessor = pickle.load(open(os.sep.join((self.model_path, \
-                                    'preprocessor.p')), 'rb'))
-            self.pretrainer = pickle.load(open(os.sep.join((self.model_path, \
-                                    'pretrainer.p')), 'rb'))
+        self.preprocessor = Preprocessor().fit(tokens=self.train_tokens,
+                                               lemmas=self.train_lemmas,
+                                               pos=self.train_pos,
+                                               morph=self.train_morph,
+                                               include_lemma=self.include_lemma)
+        self.pretrainer = Pretrainer(nb_left_tokens=self.nb_left_tokens,
+                                     nb_right_tokens=self.nb_right_tokens,
+                                     size=self.nb_embedding_dims)
+        self.pretrainer.fit(tokens=self.train_tokens)
 
         train_transformed = self.preprocessor.transform(tokens=self.train_tokens,
                                                lemmas=self.train_lemmas,
@@ -191,65 +198,58 @@ class Tagger():
             self.dev_contexts = self.pretrainer.transform(tokens=self.dev_tokens)
         if self.include_test:
             self.test_contexts = self.pretrainer.transform(tokens=self.test_tokens)
-
-        #self.print_stats()
         
-        if load_pickles:
-            print('Re-building model...')
-            self.model = model_from_json(open(os.sep.join((self.model_path, 'model_architecture.json'))).read())
-            self.model.load_weights(os.sep.join((self.model_path, 'model_weights.hdf5')))
-        else:
-            print('Building model...')
-            nb_tags = None
-            try:
-                nb_tags = len(self.preprocessor.pos_encoder.classes_)
-            except AttributeError:
-                pass
-            nb_morph_cats = None
-            try:
-                nb_morph_cats = self.preprocessor.nb_morph_cats
-            except AttributeError:
-                pass
-            max_token_len, token_char_dict = None, None
-            try:
-                max_token_len = self.preprocessor.max_token_len
-                token_char_dict = self.preprocessor.token_char_dict
-            except AttributeError:
-                pass
-            max_lemma_len, lemma_char_dict = None, None
-            try:
-                max_lemma_len = self.preprocessor.max_lemma_len
-                lemma_char_dict = self.preprocessor.lemma_char_dict
-            except AttributeError:
-                pass
-            nb_lemmas = None
-            try:
-                nb_lemmas = len(self.preprocessor.lemma_encoder.classes_)
-            except AttributeError:
-                pass
-            self.model = build_model(token_len=max_token_len,
-                                 token_char_vector_dict=token_char_dict,
-                                 lemma_len=max_lemma_len,
-                                 nb_tags=nb_tags,
-                                 nb_morph_cats=nb_morph_cats,
-                                 lemma_char_vector_dict=lemma_char_dict,
-                                 nb_encoding_layers=self.nb_encoding_layers,
-                                 nb_dense_dims=self.nb_dense_dims,
-                                 nb_embedding_dims=self.nb_embedding_dims,
-                                 nb_train_tokens=len(self.pretrainer.train_token_vocab),
-                                 nb_context_tokens=self.nb_context_tokens,
-                                 pretrained_embeddings=self.pretrainer.pretrained_embeddings,
-                                 include_token=self.include_token,
-                                 include_context=self.include_context,
-                                 include_lemma=self.include_lemma,
-                                 include_pos=self.include_pos,
-                                 include_morph=self.include_morph,
-                                 nb_filters = self.nb_filters,
-                                 filter_length = self.filter_length,
-                                 focus_repr = self.focus_repr,
-                                 dropout_level = self.dropout_level,
-                                 nb_lemmas = nb_lemmas,
-                                )
+        print('Building model...')
+        nb_tags = None
+        try:
+            nb_tags = len(self.preprocessor.pos_encoder.classes_)
+        except AttributeError:
+            pass
+        nb_morph_cats = None
+        try:
+            nb_morph_cats = self.preprocessor.nb_morph_cats
+        except AttributeError:
+            pass
+        max_token_len, token_char_dict = None, None
+        try:
+            max_token_len = self.preprocessor.max_token_len
+            token_char_dict = self.preprocessor.token_char_dict
+        except AttributeError:
+            pass
+        max_lemma_len, lemma_char_dict = None, None
+        try:
+            max_lemma_len = self.preprocessor.max_lemma_len
+            lemma_char_dict = self.preprocessor.lemma_char_dict
+        except AttributeError:
+            pass
+        nb_lemmas = None
+        try:
+            nb_lemmas = len(self.preprocessor.lemma_encoder.classes_)
+        except AttributeError:
+            pass
+        self.model = build_model(token_len=max_token_len,
+                             token_char_vector_dict=token_char_dict,
+                             lemma_len=max_lemma_len,
+                             nb_tags=nb_tags,
+                             nb_morph_cats=nb_morph_cats,
+                             lemma_char_vector_dict=lemma_char_dict,
+                             nb_encoding_layers=self.nb_encoding_layers,
+                             nb_dense_dims=self.nb_dense_dims,
+                             nb_embedding_dims=self.nb_embedding_dims,
+                             nb_train_tokens=len(self.pretrainer.train_token_vocab),
+                             nb_context_tokens=self.nb_context_tokens,
+                             pretrained_embeddings=self.pretrainer.pretrained_embeddings,
+                             include_token=self.include_token,
+                             include_context=self.include_context,
+                             include_lemma=self.include_lemma,
+                             include_pos=self.include_pos,
+                             include_morph=self.include_morph,
+                             nb_filters = self.nb_filters,
+                             filter_length = self.filter_length,
+                             focus_repr = self.focus_repr,
+                             dropout_level = self.dropout_level,
+                             nb_lemmas = nb_lemmas,
+                            )
         self.save()
         self.setup = True
 
@@ -301,40 +301,6 @@ class Tagger():
                                                  silver=pred_morph,
                                                  test_tokens=self.test_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
-
-        """
-        ##### OUT #######################################################################################
-        if self.include_lemma and not self.include_pos:
-            with codecs.open(os.sep.join((self.model_path, 'test_out.txt')), 'w', 'utf8') as f:
-                for p in zip(self.test_tokens, self.test_lemmas, pred_lemmas):
-                    if p[0] not in self.preprocessor.known_tokens:
-                        p = list(p)
-                        p.append('<UNK>')
-                    try:
-                        f.write('\t'.join([str(r) for r in p]) + '\n')
-                    except:
-                        pass
-        elif not self.include_lemma and self.include_pos:
-            with codecs.open(os.sep.join((self.model_path, 'test_out.txt')), 'w', 'utf8') as f:
-                for p in zip(self.test_tokens, self.test_pos, pred_pos):
-                    if p[0] not in self.preprocessor.known_tokens:
-                        p = list(p)
-                        p.append('<UNK>')
-                    try:
-                        f.write('\t'.join([str(r) for r in p]) + '\n')
-                    except:
-                        pass
-        elif self.include_lemma and self.include_pos:
-            with codecs.open(os.sep.join((self.model_path, 'test_out.txt')), 'w', 'utf8') as f:
-                for p in zip(self.test_tokens, self.test_pos, pred_pos, self.test_lemmas, pred_lemmas):
-                    if p[0] not in self.preprocessor.known_tokens:
-                        p = list(p)
-                        p.append('<UNK>')
-                    try:
-                        f.write('\t'.join([str(r) for r in p]) + '\n')
-                    except:
-                        pass
-        """
         return
 
     def save(self):
@@ -351,7 +317,10 @@ class Tagger():
         # save pretrainer:
         with open(os.sep.join((self.model_path, 'pretrainer.p')), 'wb') as f:
             pickle.dump(self.pretrainer, f)
-
+        # save known lemmas:
+        with open(os.sep.join((self.model_path, 'known_lemmas.p')), 'wb') as f:
+            pickle.dump(self.known_lemmas, f)
+        
         # plot current embeddings:
         if self.include_context:
             weights = self.model.nodes['context_embedding'].get_weights()[0]
@@ -487,6 +456,38 @@ class Tagger():
                                                      test_tokens=self.dev_tokens,
                                                      known_tokens=self.preprocessor.known_tokens)
 
+    def annotate(self, tokens):
+        X_focus = self.preprocessor.transform(tokens=tokens)['X_focus']
+        X_context = self.pretrainer.transform(tokens=tokens)
+
+        # get predictions:
+        d = {}
+        if self.include_token:
+            d['focus_in'] = X_focus
+        if self.include_context:
+            d['context_in'] = X_context
+        preds = self.model.predict(data=d, batch_size=self.batch_size)
+
+        annotation_dict = {'tokens': tokens}
+        if self.include_lemma:
+            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=preds['lemma_out'])
+            if self.postcorrect:
+                for i in range(len(pred_lemmas)):
+                    if pred_lemmas[i] not in self.known_lemmas:
+                        pred_lemmas[i] = min(self.known_lemmas,
+                                            key=lambda x: editdistance.eval(x, pred_lemmas[i]))
+            annotation_dict['lemmas'] = pred_lemmas
+
+        if self.include_pos:
+            pred_pos = self.preprocessor.inverse_transform_pos(predictions=preds['pos_out'])
+            annotation_dict['pos'] = pred_pos
+        
+        if self.include_morph:
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=preds['morph_out'])
+            annotation_dict['morph'] = pred_morph
+
+        return annotation_dict
+        
 
         
 

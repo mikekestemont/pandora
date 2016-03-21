@@ -5,10 +5,10 @@ from __future__ import print_function
 
 import glob
 import codecs
+import re
 
-import numpy as np
 
-def load_annotated_data(directory, format='conll', nb_instances=None,
+def load_annotated_data(directory='directory', format='conll', nb_instances=None,
                         include_lemma=True, include_morph=True, include_pos=True):
     instances = []
     for filepath in glob.glob(directory+'/*'):
@@ -21,7 +21,7 @@ def load_annotated_data(directory, format='conll', nb_instances=None,
         instances.extend(insts)
     return instances
 
-def load_annotated_file(filepath, format, nb_instances=None,
+def load_annotated_file(filepath='text.txt', format='tab', nb_instances=None,
                         include_lemma=True, include_morph=True,
                         include_pos=True):
     instances = {'token': []}
@@ -38,11 +38,10 @@ def load_annotated_file(filepath, format, nb_instances=None,
                 try:
                     idx, tok, _, lem, _, pos, morph = \
                         line.split()[:7]
-                    tok = tok.lower()
                     if include_lemma:
                         lem = lem.lower()
                     if include_morph:
-                        morph = morph.split('|')
+                        '|'.join(sorted(set(morph.split('|'))))
                     
                     instances['token'].append(tok)
                     if include_lemma:
@@ -62,14 +61,13 @@ def load_annotated_file(filepath, format, nb_instances=None,
             if line:
                 try:
                     comps = line.split()
-                    tok = comps[0].lower()
+                    tok = comps[0]
                     if include_lemma:
                         lem = comps[1].lower()
                     if include_pos:
                         pos = comps[2]
                     if include_morph:
-                        morph = comps[3].split('|')
-                        #morph = '+'.join(sorted(set(morph)))
+                        morph = '|'.join(sorted(set(comps[3].split('|'))))
                     
                     instances['token'].append(tok)
                     if include_lemma:
@@ -85,16 +83,28 @@ def load_annotated_file(filepath, format, nb_instances=None,
                     break
     return instances
 
-def load_raw_file(filepath, nb_instances=1000):
-    instances = []
-    for line in codecs.open(filepath, 'r', 'utf8'):
-        line = line.strip()
-        if line:
-            instances.append(line)
-        nb_instances -= 1
-        if nb_instances <= 0:
-            break
-    return instances
+def load_unannotated_file(filepath='test.txt', nb_instances=None, tokenized_input=False):
+    if tokenized_input:
+        instances = []
+        for line in codecs.open(filepath, 'r', 'utf8'):
+            line = line.strip()
+            if line:
+                instances.append(line)
+            if nb_instances:
+                nb_instances -= 1
+                if nb_instances <= 0:
+                    break
+        return instances
+    else:
+        from nltk.tokenize import wordpunct_tokenize
+        W = re.compile('\s+')
+        with codecs.open(filepath, 'r', 'utf8') as f:
+            text = W.sub(f.read(), ' ')
+        tokens = wordpunct_tokenize(text)
+        if nb_instances:
+            return tokens[:nb_instances]
+        else:
+            return tokens
 
 def stats(tokens, lemmas, known):
     print('Nb of tokens:', len(tokens))
