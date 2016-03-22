@@ -26,7 +26,6 @@ def build_model(token_len, token_char_vector_dict,
                 filter_length = 3,
                 focus_repr = 'recurrent',
                 dropout_level = .15,
-                pos_weight_ = 0.2,
                 ):
     
     m = Graph()
@@ -231,41 +230,71 @@ def build_model(token_len, token_char_vector_dict,
         m.add_output(name='pos_out', input='pos_softmax')
 
     if include_morph:
-        # add morph tag output:
-        m.add_node(Dense(output_dim=nb_dense_dims,
-                         activation='relu'),
-                   name='morph_dense1',
-                   input='joined')
-        m.add_node(Dropout(dropout_level),
-                    name='morph_dense_dropout1',
-                    input='morph_dense1')
-        m.add_node(Dense(output_dim=nb_dense_dims,
-                         activation='relu'),
-                   name='morph_dense2',
-                   input='morph_dense_dropout1')
-        m.add_node(Dropout(dropout_level),
-                    name='morph_dense_dropout2',
-                    input='morph_dense2')
-        m.add_node(Dense(output_dim=nb_morph_cats),
-                   name='morph_dense3',
-                   input='morph_dense_dropout2')
-        m.add_node(Dropout(dropout_level),
-                    name='morph_dense_dropout3',
-                    input='morph_dense3')
-        m.add_node(Activation('tanh'),
-                    name='morph_tanh',
-                    input='morph_dense_dropout3')
-        m.add_output(name='morph_out', input='morph_tanh')
+        if include_morph == 'label':
+            # add pos tag output:
+            m.add_node(Dense(output_dim=nb_dense_dims,
+                             activation='relu'),
+                       name='morph_dense1',
+                       input='joined')
+            m.add_node(Dropout(dropout_level),
+                        name='morph_dense_dropout1',
+                        input='morph_dense1')
+            m.add_node(Dense(output_dim=nb_dense_dims,
+                             activation='relu'),
+                       name='morph_dense2',
+                       input='morph_dense_dropout1')
+            m.add_node(Dropout(dropout_level),
+                        name='morph_dense_dropout2',
+                        input='morph_dense2')
+            m.add_node(Dense(output_dim=nb_morph_cats),
+                       name='morph_dense3',
+                       input='morph_dense_dropout2')
+            m.add_node(Dropout(dropout_level),
+                        name='morph_dense_dropout3',
+                        input='morph_dense3')
+            m.add_node(Activation('softmax'),
+                        name='morph_softmax',
+                        input='morph_dense_dropout3')
+            m.add_output(name='morph_out', input='morph_softmax')
+
+        elif include_morph == 'multilabel':
+            # add morph tag output:
+            m.add_node(Dense(output_dim=nb_dense_dims,
+                             activation='relu'),
+                       name='morph_dense1',
+                       input='joined')
+            m.add_node(Dropout(dropout_level),
+                        name='morph_dense_dropout1',
+                        input='morph_dense1')
+            m.add_node(Dense(output_dim=nb_dense_dims,
+                             activation='relu'),
+                       name='morph_dense2',
+                       input='morph_dense_dropout1')
+            m.add_node(Dropout(dropout_level),
+                        name='morph_dense_dropout2',
+                        input='morph_dense2')
+            m.add_node(Dense(output_dim=nb_morph_cats),
+                       name='morph_dense3',
+                       input='morph_dense_dropout2')
+            m.add_node(Dropout(dropout_level),
+                        name='morph_dense_dropout3',
+                        input='morph_dense3')
+            m.add_node(Activation('tanh'),
+                        name='morph_tanh',
+                        input='morph_dense_dropout3')
+            m.add_output(name='morph_out', input='morph_tanh')
 
     loss_dict = {}
     
     if include_lemma:
         loss_dict['lemma_out'] = 'categorical_crossentropy'
     if include_pos:
-        #loss_dict['pos_out'] = lambda x, y: pos_weight_ * categorical_crossentropy(x, y)
         loss_dict['pos_out'] = 'categorical_crossentropy'
     if include_morph:
-        loss_dict['morph_out'] = 'binary_crossentropy'
+        if include_morph == 'label':
+          loss_dict['morph_out'] = 'categorical_crossentropy'
+        elif include_morph == 'multilabel':
+          loss_dict['morph_out'] = 'binary_crossentropy'
 
     m.compile(optimizer='RMSprop', loss=loss_dict)
 

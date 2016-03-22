@@ -12,7 +12,7 @@ def main():
 
     # set hyperparameters:
     nb_encoding_layers = 1
-    nb_dense_dims = 300
+    nb_dense_dims = 500
     batch_size = 100
     nb_left_tokens = 2
     nb_right_tokens = 2
@@ -23,7 +23,7 @@ def main():
     include_context = True
     include_lemma = 'generate' # or None, or 'generate'
     include_pos = True
-    include_morph = True
+    include_morph = 'label' # None, label or multilabel
     include_dev = False
     include_test = True
     nb_filters = 100
@@ -31,6 +31,7 @@ def main():
     focus_repr = 'recurrent'
     dropout_level = .15
 
+    
     train_data = pandora.utils.load_annotated_file('data/capitula_classic/train0.tsv',
                                             format='tab',
                                             include_pos=include_pos,
@@ -71,10 +72,9 @@ def main():
     for i in range(num_epochs):
         tagger.epoch()
         tagger.test()
-
-    """
+    
     tagger.save()
-
+    
     tagger = Tagger(nb_encoding_layers = nb_encoding_layers,
                     nb_dense_dims = nb_dense_dims,
                     batch_size = batch_size,
@@ -96,7 +96,6 @@ def main():
                     dropout_level = dropout_level,
                     )
     tagger.load()
-    """
 
     print('annotating...')
     orig_path = 'data/12C/orig/'
@@ -109,8 +108,12 @@ def main():
                                                          tokenized_input=False)
         annotations = tagger.annotate(unseen_tokens)
         with codecs.open(new_path + filename, 'w', 'utf8') as f:
-            for t, l, p, m in zip(annotations['tokens'], annotations['lemmas'], annotations['pos'], annotations['morph']):
-                f.write(' '.join((t, l, p, m))+'\n')
+            if postcorrect:
+                for t, l, pl, p, m in zip(annotations['tokens'], annotations['lemmas'], annotations['postcorrect_lemmas'], annotations['pos'], annotations['morph']):
+                    f.write(' '.join((t, l, pl, p, m))+'\n')
+            else:
+                for t, l, p, m in zip(annotations['tokens'], annotations['lemmas'], annotations['pos'], annotations['morph']):
+                    f.write(' '.join((t, l, p, m))+'\n')
     
     print('::: ended :::')
 

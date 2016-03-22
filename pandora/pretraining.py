@@ -19,7 +19,7 @@ class SentenceIterator:
     def __init__(self, tokens, sentence_len=100):
         
         self.sentence_len = sentence_len
-        self.tokens = tokens
+        self.tokens = [t.lower() for t in tokens]
         self.idxs = []
         start_idx, end_idx = 0, self.sentence_len
         while end_idx < len(self.tokens):
@@ -50,6 +50,7 @@ class Pretrainer:
 
     def fit(self, tokens):
         # get most frequent items for plotting:
+        tokens = [t.lower() for t in tokens]
         self.mfi = [t for t,_ in Counter(tokens).most_common(self.nb_mfi)]
         self.sentence_iterator = SentenceIterator(tokens=tokens)
         # train embeddings:
@@ -89,7 +90,7 @@ class Pretrainer:
     def transform(self, tokens):
 
         context_ints = []
-
+        tokens = [t.lower() for t in tokens]
         for curr_idx, token in enumerate(tokens):
             ints = []
             # vectorize left context:
@@ -104,11 +105,7 @@ class Pretrainer:
                 idxs = [0] + idxs
             ints.extend(idxs)
 
-            # right now: WILL INCLUDE FOCUS TOKEN
-            # vectorize right context:
-            #right_context_tokens = [tokens[curr_idx+t+1]\
-            #                            for t in range(self.nb_right_tokens)\
-            #                                if curr_idx+t+1 < len(tokens)]
+            # RIGHT CONTEXT WILL INCLUDE FOCUS TOKEN
             right_context_tokens = [tokens[curr_idx+t]\
                                         for t in range(self.nb_right_tokens)\
                                             if curr_idx+t < len(tokens)]

@@ -145,7 +145,8 @@ class Tagger():
                                                lemmas=self.train_lemmas,
                                                pos=self.train_pos,
                                                morph=self.train_morph,
-                                               include_lemma=self.include_lemma)
+                                               include_lemma=self.include_lemma,
+                                               include_morph=self.include_morph)
         self.pretrainer = Pretrainer(nb_left_tokens=self.nb_left_tokens,
                                      nb_right_tokens=self.nb_right_tokens,
                                      size=self.nb_embedding_dims)
@@ -259,9 +260,11 @@ class Tagger():
         print('Test stats:')
         utils.stats(tokens=self.test_tokens, lemmas=self.test_lemmas, known=self.preprocessor.known_tokens)
 
-    def test(self):
+    def test(self, multilabel_threshold=0.5):
         if not self.include_test:
             raise ValueError('Please do not call .test() if no test data is available.')
+
+        score_dict = {}
 
         # get test predictions:
         d = {}
@@ -281,7 +284,7 @@ class Tagger():
                     if pred_lemmas[i] not in self.known_lemmas:
                         pred_lemmas[i] = min(self.known_lemmas,
                                         key=lambda x: editdistance.eval(x, pred_lemmas[i]))
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.test_lemmas,
+            score_dict['test_lemma'] = evaluation.single_label_accuracies(gold=self.test_lemmas,
                                                  silver=pred_lemmas,
                                                  test_tokens=self.test_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
@@ -289,19 +292,26 @@ class Tagger():
         if self.include_pos:
             print('::: Test scores (pos) :::')
             pred_pos = self.preprocessor.inverse_transform_pos(predictions=test_preds['pos_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.test_pos,
+            score_dict['test_pos'] = evaluation.single_label_accuracies(gold=self.test_pos,
                                                  silver=pred_pos,
                                                  test_tokens=self.test_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
         
         if self.include_morph:     
             print('::: Test scores (morph) :::')
-            pred_morph = self.preprocessor.inverse_transform_morph(predictions=test_preds['morph_out'])
-            all_acc, kno_acc, unk_acc = evaluation.multilabel_accuracies(gold=self.test_morph,
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=test_preds['morph_out'],
+                                                                   threshold=multilabel_threshold)
+            if self.include_morph == 'label':
+                score_dict['test_morph'] = evaluation.single_label_accuracies(gold=self.test_morph,
+                                                 silver=pred_morph,
+                                                 test_tokens=self.test_tokens,
+                                                 known_tokens=self.preprocessor.known_tokens)                
+            elif self.include_morph == 'multilabel':
+                score_dict['test_morph'] = evaluation.multilabel_accuracies(gold=self.test_morph,
                                                  silver=pred_morph,
                                                  test_tokens=self.test_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
-        return
+        return score_dict
 
     def save(self):
         # save architecture:
@@ -352,7 +362,7 @@ class Tagger():
             sns.plt.savefig(os.sep.join((self.model_path, 'embed_after.pdf')),
                             bbox_inches=0)
 
-    def epoch(self):
+    def epoch(self, autosave=True):
         if not self.setup:
             raise ValueError('Not set up yet... Call Tagger.setup_() first.')
 
@@ -405,10 +415,11 @@ class Tagger():
             dev_preds = self.model.predict(data=d,
                                     batch_size=self.batch_size)
 
+        score_dict = {}
         if self.include_lemma:
             print('::: Train scores (lemmas) :::')
             pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=train_preds['lemma_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.train_lemmas,
+            score_dict['train_lemma'] = evaluation.single_label_accuracies(gold=self.train_lemmas,
                                                  silver=pred_lemmas,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
@@ -420,7 +431,7 @@ class Tagger():
                         if pred_lemmas[i] not in self.known_lemmas:
                             pred_lemmas[i] = min(self.known_lemmas,
                                             key=lambda x: editdistance.eval(x, pred_lemmas[i]))
-                all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_lemmas,
+                score_dict['dev_lemma'] = evaluation.single_label_accuracies(gold=self.dev_lemmas,
                                                      silver=pred_lemmas,
                                                      test_tokens=self.dev_tokens,
                                                      known_tokens=self.preprocessor.known_tokens)
@@ -428,14 +439,14 @@ class Tagger():
         if self.include_pos:
             print('::: Train scores (pos) :::')
             pred_pos = self.preprocessor.inverse_transform_pos(predictions=train_preds['pos_out'])
-            all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.train_pos,
+            score_dict['train_pos'] = evaluation.single_label_accuracies(gold=self.train_pos,
                                                  silver=pred_pos,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
             if self.include_dev:
                 print('::: Dev scores (pos) :::')
                 pred_pos = self.preprocessor.inverse_transform_pos(predictions=dev_preds['pos_out'])
-                all_acc, kno_acc, unk_acc = evaluation.single_label_accuracies(gold=self.dev_pos,
+                score_dict['dev_pos'] = evaluation.single_label_accuracies(gold=self.dev_pos,
                                                      silver=pred_pos,
                                                      test_tokens=self.dev_tokens,
                                                      known_tokens=self.preprocessor.known_tokens)
@@ -443,18 +454,38 @@ class Tagger():
         if self.include_morph:
             print('::: Train scores (morph) :::')
             pred_morph = self.preprocessor.inverse_transform_morph(predictions=train_preds['morph_out'])
-            all_acc, kno_acc, unk_acc = evaluation.multilabel_accuracies(gold=self.train_morph,
+            if self.include_morph == 'label':
+                score_dict['train_morph'] = evaluation.single_label_accuracies(gold=self.train_morph,
+                                                 silver=pred_morph,
+                                                 test_tokens=self.train_tokens,
+                                                 known_tokens=self.preprocessor.known_tokens)
+            elif self.include_morph == 'multilabel':
+                score_dict['train_morph'] = evaluation.multilabel_accuracies(gold=self.train_morph,
                                                  silver=pred_morph,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
 
+
             if self.include_dev:
                 print('::: Dev scores (morph) :::')
                 pred_morph = self.preprocessor.inverse_transform_morph(predictions=dev_preds['morph_out'])
-                all_acc, kno_acc, unk_acc = evaluation.multilabel_accuracies(gold=self.train_morph,
+                if self.include_morph == 'label':
+                    score_dict['dev_morph'] = evaluation.single_label_accuracies(gold=self.train_morph,
                                                      silver=pred_morph,
                                                      test_tokens=self.dev_tokens,
                                                      known_tokens=self.preprocessor.known_tokens)
+                elif self.include_morph == 'multilabel':
+                    score_dict['dev_morph'] = evaluation.multilabel_accuracies(gold=self.train_morph,
+                                                     silver=pred_morph,
+                                                     test_tokens=self.dev_tokens,
+                                                     known_tokens=self.preprocessor.known_tokens)
+
+        if autosave:
+            self.save()
+
+        return score_dict
+
+
 
     def annotate(self, tokens):
         X_focus = self.preprocessor.transform(tokens=tokens)['X_focus']
@@ -471,12 +502,13 @@ class Tagger():
         annotation_dict = {'tokens': tokens}
         if self.include_lemma:
             pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=preds['lemma_out'])
+            annotation_dict['lemmas'] = pred_lemmas
             if self.postcorrect:
                 for i in range(len(pred_lemmas)):
                     if pred_lemmas[i] not in self.known_lemmas:
                         pred_lemmas[i] = min(self.known_lemmas,
                                             key=lambda x: editdistance.eval(x, pred_lemmas[i]))
-            annotation_dict['lemmas'] = pred_lemmas
+                annotation_dict['postcorrect_lemmas'] = pred_lemmas
 
         if self.include_pos:
             pred_pos = self.preprocessor.inverse_transform_pos(predictions=preds['pos_out'])

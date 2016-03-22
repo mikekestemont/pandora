@@ -11,8 +11,11 @@ import numpy as np
 
 from model import build_model
 
-def index_characters(tokens):
-    vocab = {ch for tok in tokens for ch in tok.lower()}
+def index_characters(tokens, v2u=True):
+    if v2u:
+        vocab = {ch for tok in tokens for ch in tok.lower().replace('v', 'u')}
+    else:
+        vocab = {ch for tok in tokens for ch in tok.lower()}
     vocab = vocab.union({'$', '|'})
     char_vocab = tuple(sorted(vocab))
     char_vector_dict, char_idx = {}, {}
@@ -27,10 +30,12 @@ def index_characters(tokens):
     return char_vector_dict, char_idx
 
 def vectorize_tokens(tokens, char_vector_dict,
-                     max_len=15):
+                     max_len=15, v2u=True):
     X = []
     for token in tokens:
         token = token.lower()
+        if v2u:
+            token.lower().replace('v', 'u')
         x = vectorize_token(seq=token,
                             char_vector_dict=char_vector_dict,
                             max_len=max_len)
@@ -110,7 +115,7 @@ class Preprocessor():
     def __init__(self):
         pass
 
-    def fit(self, tokens, lemmas, pos, morph, include_lemma):
+    def fit(self, tokens, lemmas, pos, morph, include_lemma, include_morph):
         # fit focus tokens:
         self.max_token_len = len(max(tokens, key=len))+1
         self.token_char_dict, self.token_char_idx = \
@@ -134,27 +139,26 @@ class Preprocessor():
             self.pos_encoder = LabelEncoder()
             self.pos_encoder.fit(pos + ['<UNK>']) # do we need this?
 
-        """ legacy:
-        # fit morph tags:
         if morph:
-            self.morph_encoder = LabelEncoder()
-            self.morph_encoder.fit(morph + ['<UNK>'])
-        """
-        
-        if morph:
-            # fit morph analysis:
-            morph_dicts = parse_morphs(morph)
-            self.morph_encoder = DictVectorizer(sparse=False)
-            self.morph_encoder.fit(morph_dicts)
-            self.nb_morph_cats = len(self.morph_encoder.feature_names_)
-            self.morph_idxs = {}
-            for i, feat_name in enumerate(self.morph_encoder.feature_names_):
-                label, _ = feat_name.strip().split('=')
-                try:
-                    self.morph_idxs[label].add(i)
-                except KeyError:
-                    self.morph_idxs[label] = set()
-                    self.morph_idxs[label].add(i)
+            self.include_morph = include_morph
+            if self.include_morph == 'label':
+                self.morph_encoder = LabelEncoder()
+                self.morph_encoder.fit(morph + ['<UNK>'])
+                self.nb_morph_cats = len(self.morph_encoder.classes_)
+            elif self.include_morph == 'multilabel':
+                # fit morph analysis:
+                morph_dicts = parse_morphs(morph)
+                self.morph_encoder = DictVectorizer(sparse=False)
+                self.morph_encoder.fit(morph_dicts)
+                self.nb_morph_cats = len(self.morph_encoder.feature_names_)
+                self.morph_idxs = {}
+                for i, feat_name in enumerate(self.morph_encoder.feature_names_):
+                    label, _ = feat_name.strip().split('=')
+                    try:
+                        self.morph_idxs[label].add(i)
+                    except KeyError:
+                        self.morph_idxs[label] = set()
+                        self.morph_idxs[label].add(i)
         
         return self
 
@@ -196,10 +200,20 @@ class Preprocessor():
             returnables['X_pos'] = X_pos
 
         if morph:
-            # vectorize morph:
-            morph_dicts = parse_morphs(morph)
-            X_morph = self.morph_encoder.transform(morph_dicts)
-            returnables['X_morph'] = X_morph
+            if self.include_morph == 'label':
+                morph = [m if m in self.morph_encoder.classes_ \
+                        else '<UNK>' for m in morph]
+                morph = self.morph_encoder.transform(morph)
+            
+                X_morph = np_utils.to_categorical(morph,
+                        nb_classes=len(self.morph_encoder.classes_))
+                returnables['X_morph'] = X_morph
+
+            elif self.include_morph == 'multilabel':
+                # vectorize morph:
+                morph_dicts = parse_morphs(morph)
+                X_morph = self.morph_encoder.transform(morph_dicts)
+                returnables['X_morph'] = X_morph
 
         return returnables
 
@@ -245,17 +259,21 @@ class Preprocessor():
         Only select highest activation per category, if that max
         is above threshold.
         """
-        morphs = []
-        for pred in predictions:
-            m = []
-            for label, idxs in self.morph_idxs.items():
-                scores = ((pred[idx], idx) for idx in idxs)
-                max_score = max(scores, key=itemgetter(0))
-                if max_score[0] >= threshold:
-                    m.append(self.morph_encoder.feature_names_[max_score[1]])
-            if m:
-                morphs.append('|'.join(sorted(set(m))))
-            else:
-                morphs.append('_')
+        if self.include_morph == 'label':
+            predictions = np.argmax(predictions, axis=1)
+            return self.morph_encoder.inverse_transform(predictions)
+        elif self.include_morph == 'multilabel':
+            morphs = []
+            for pred in predictions:
+                m = []
+                for label, idxs in self.morph_idxs.items():
+                    scores = ((pred[idx], idx) for idx in idxs)
+                    max_score = max(scores, key=itemgetter(0))
+                    if max_score[0] >= threshold:
+                        m.append(self.morph_encoder.feature_names_[max_score[1]])
+                if m:
+                    morphs.append('|'.join(sorted(set(m))))
+                else:
+                    morphs.append('_')
         return morphs
         
