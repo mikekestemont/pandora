@@ -28,93 +28,123 @@ from model import build_model
 from preprocessing import Preprocessor
 from pretraining import Pretrainer
 
-
 class Tagger():
 
-    def __init__(self, nb_encoding_layers = 1,
-                    nb_dense_dims = 30,
-                    batch_size = 100,
-                    nb_left_tokens = 2,
-                    nb_right_tokens = 2,
-                    nb_embedding_dims = 150,
-                    model_name = 'new_model',
-                    postcorrect = True,
-                    include_token = True,
-                    include_context = True,
-                    include_lemma = True,
-                    include_pos = True,
-                    include_morph = True,
-                    include_dev = True,
-                    include_test = True,
-                    nb_filters = 100,
-                    filter_length = 3,
-                    focus_repr = 'recurrent',
-                    dropout_level = .1,
-                    ):
+    def __init__(self,
+                 config_path=None,
+                 nb_encoding_layers = 1,
+                 nb_dense_dims = 30,
+                 batch_size = 100,
+                 nb_left_tokens = 2,
+                 nb_right_tokens = 2,
+                 nb_embedding_dims = 150,
+                 model_dir = 'new_model',
+                 postcorrect = True,
+                 include_token = True,
+                 include_context = True,
+                 include_lemma = True,
+                 include_pos = True,
+                 include_morph = True,
+                 include_dev = True,
+                 include_test = True,
+                 nb_filters = 100,
+                 filter_length = 3,
+                 focus_repr = 'recurrent',
+                 dropout_level = .1,
+                 load=False,
+                 nb_epochs=15,
+                 ):
 
-        # set hyperparameters:
-        self.nb_encoding_layers = nb_encoding_layers
-        self.nb_dense_dims = nb_dense_dims
-        self.batch_size = batch_size
-        self.nb_left_tokens = nb_left_tokens
-        self.nb_right_tokens = nb_right_tokens
-        self.nb_context_tokens = self.nb_left_tokens + self.nb_right_tokens
-        self.nb_embedding_dims = nb_embedding_dims
-        self.model_name = model_name
-        self.postcorrect = postcorrect
-        self.nb_filters = nb_filters
-        self.filter_length = filter_length
-        self.focus_repr = focus_repr
-        self.dropout_level = dropout_level
+        if load:
+            if model_dir:
+                self.config_path = os.sep.join((model_dir, 'config.txt'))
+            else:
+                raise ValueError('To load a tagger you, must specify model_name!')
+        else:
+            self.config_path = config_path
 
-        # which subnets?
-        self.include_token = include_token
-        self.include_context = include_context
+        if not config_path:
+            self.nb_encoding_layers = int(nb_encoding_layers)
+            self.nb_dense_dims = int(nb_dense_dims)
+            self.batch_size = int(batch_size)
+            self.nb_left_tokens = int(nb_left_tokens)
+            self.nb_right_tokens = int(nb_right_tokens)
+            self.nb_context_tokens = self.nb_left_tokens + self.nb_right_tokens
+            self.nb_embedding_dims = int(nb_embedding_dims)
+            self.model_dir = model_dir
+            self.postcorrect = bool(postcorrect)
+            self.nb_filters = int(nb_filters)
+            self.filter_length = int(filter_length)
+            self.focus_repr = focus_repr
+            self.dropout_level = float(dropout_level)
+            self.include_token = include_token
+            self.include_context = include_context
+            self.include_lemma = include_lemma
+            self.include_pos = include_pos
+            self.include_morph = include_morph
+            self.include_dev = include_dev
+            self.include_test = include_test
+            self.nb_epochs = int(nb_epochs)
 
-        # which headnets?
-        self.include_lemma = include_lemma
-        self.include_pos = include_pos
-        self.include_morph = include_morph
-
-        # include dev and/or test?
-        self.include_dev = include_dev
-        self.include_test = include_test
+        else:
+            param_dict = utils.get_param_dict(self.config_path)
+            self.nb_encoding_layers = int(param_dict['nb_encoding_layers'])
+            self.nb_epochs = int(param_dict['nb_epochs'])
+            self.nb_dense_dims = int(param_dict['nb_dense_dims'])
+            self.batch_size = int(param_dict['batch_size'])
+            self.nb_left_tokens = int(param_dict['nb_left_tokens'])
+            self.nb_right_tokens = int(param_dict['nb_right_tokens'])
+            self.nb_context_tokens = self.nb_left_tokens + self.nb_right_tokens
+            self.nb_embedding_dims = int(param_dict['nb_embedding_dims'])
+            self.model_dir = param_dict['model_dir']
+            self.postcorrect = param_dict['postcorrect']
+            self.nb_filters = int(param_dict['nb_filters'])
+            self.filter_length = int(param_dict['filter_length'])
+            self.focus_repr = param_dict['focus_repr']
+            self.dropout_level = float(param_dict['dropout_level'])
+            self.include_token = param_dict['include_token']
+            self.include_context = param_dict['include_context']
+            self.include_lemma = param_dict['include_lemma']
+            self.include_pos = param_dict['include_pos']
+            self.include_morph = param_dict['include_morph']
+            self.include_dev = param_dict['include_dev']
+            self.include_test = param_dict['include_test']
         
+        # create a models directory if it isn't there already:
+        if not os.path.isdir(self.model_dir):
+            os.mkdir(model_dir)
+
         # initialize:
         self.setup = False
-        self.nb_epochs = 0
-
-        # initialize paths:
-        # create a models directory:
-        MODELS_DIR = 'models'
-        if not os.path.isdir(MODELS_DIR):
-            os.mkdir(MODELS_DIR)
-        self.model_path = os.sep.join((MODELS_DIR, self.model_name))
+        self.curr_nb_epochs = 0
 
         self.train_tokens, self.dev_tokens, self.test_tokens = None, None, None
         self.train_lemmas, self.dev_lemmas, self.test_lemmas = None, None, None
         self.train_pos, self.dev_pos, self.test_pos = None, None, None
         self.train_morph, self.dev_morph, self.test_morph = None, None, None
 
+        if load:
+            self.load()
+
     def load(self):
         print('Re-loading preprocessor...')
-        self.preprocessor = pickle.load(open(os.sep.join((self.model_path, \
+        self.preprocessor = pickle.load(open(os.sep.join((self.model_dir, \
                                     'preprocessor.p')), 'rb'))
         print('Re-loading pretrainer...')
-        self.pretrainer = pickle.load(open(os.sep.join((self.model_path, \
+        self.pretrainer = pickle.load(open(os.sep.join((self.model_dir, \
                                     'pretrainer.p')), 'rb'))
         print('Re-building model...')
-        self.model = model_from_json(open(os.sep.join((self.model_path, 'model_architecture.json'))).read())
-        self.model.load_weights(os.sep.join((self.model_path, 'model_weights.hdf5')))
+        self.model = model_from_json(open(os.sep.join((self.model_dir, 'model_architecture.json'))).read())
+        self.model.load_weights(os.sep.join((self.model_dir, 'model_weights.hdf5')))
         print('Loading known lemmas...')
-        self.known_lemmas = pickle.load(open(os.sep.join((self.model_path, \
+        self.known_lemmas = pickle.load(open(os.sep.join((self.model_dir, \
                                     'known_lemmas.p')), 'rb'))
 
     def setup_to_train(self, train_data=None, dev_data=None, test_data=None):
         # create a model directory:
-        if os.path.isdir(self.model_path):
-            shutil.rmtree(self.model_path)
-        os.mkdir(self.model_path)
+        if os.path.isdir(self.model_dir):
+            shutil.rmtree(self.model_dir)
+        os.mkdir(self.model_dir)
 
         self.train_tokens = train_data['token']
         if self.include_test:
@@ -254,6 +284,13 @@ class Tagger():
         self.save()
         self.setup = True
 
+    def train(self, nb_epochs=None):
+        if nb_epochs:
+            self.nb_epochs = nb_epochs
+        for i in range(self.nb_epochs):
+            scores = self.epoch()
+        return scores
+
     def print_stats(self):
         print('Train stats:')
         utils.stats(tokens=self.train_tokens, lemmas=self.train_lemmas, known=self.preprocessor.known_tokens)
@@ -316,20 +353,47 @@ class Tagger():
     def save(self):
         # save architecture:
         json_string = self.model.to_json()
-        with open(os.sep.join((self.model_path, 'model_architecture.json')), 'wb') as f:
+        with open(os.sep.join((self.model_dir, 'model_architecture.json')), 'wb') as f:
             f.write(json_string)
         # save weights:
-        self.model.save_weights(os.sep.join((self.model_path, 'model_weights.hdf5')), \
+        self.model.save_weights(os.sep.join((self.model_dir, 'model_weights.hdf5')), \
                 overwrite=True)
         # save preprocessor:
-        with open(os.sep.join((self.model_path, 'preprocessor.p')), 'wb') as f:
+        with open(os.sep.join((self.model_dir, 'preprocessor.p')), 'wb') as f:
             pickle.dump(self.preprocessor, f)
         # save pretrainer:
-        with open(os.sep.join((self.model_path, 'pretrainer.p')), 'wb') as f:
+        with open(os.sep.join((self.model_dir, 'pretrainer.p')), 'wb') as f:
             pickle.dump(self.pretrainer, f)
         # save known lemmas:
-        with open(os.sep.join((self.model_path, 'known_lemmas.p')), 'wb') as f:
+        with open(os.sep.join((self.model_dir, 'known_lemmas.p')), 'wb') as f:
             pickle.dump(self.known_lemmas, f)
+        # save config file:
+        if self.config_path:
+            # make sure that we can reproduce parametrization when reloading:
+            shutil.copy(self.config_path, os.sep.join((self.model_dir, 'config.txt')))
+        else:
+            with open(os.sep.join((self.model_dir, 'config.txt')), 'w') as F:
+                F.write('# Parameter file\n\n[global]\n')
+                F.write('nb_encoding_layers = '+str(self.nb_encoding_layers)+'\n')
+                F.write('nb_dense_dims = '+str(self.nb_dense_dims)+'\n')
+                F.write('batch_size = '+str(self.batch_size)+'\n')
+                F.write('nb_left_tokens = '+str(self.nb_left_tokens)+'\n')
+                F.write('nb_right_tokens = '+str(self.nb_right_tokens)+'\n')
+                F.write('nb_embedding_dims = '+str(self.nb_embedding_dims)+'\n')
+                F.write('model_dir = '+str(self.model_dir)+'\n')
+                F.write('postcorrect = postcorrect'+str(self.postcorrect)+'\n')
+                F.write('nb_filters = '+str(self.nb_filters)+'\n')
+                F.write('filter_length = '+str(self.filter_length)+'\n')
+                F.write('focus_repr = '+str(self.focus_repr)+'\n')
+                F.write('dropout_level = '+str(self.dropout_level)+'\n')
+                F.write('include_token = '+str(self.include_context)+'\n')
+                F.write('include_context = '+str(self.include_context)+'\n')
+                F.write('include_lemma = '+str(self.include_lemma)+'\n')
+                F.write('include_pos = '+str(self.include_pos)+'\n')
+                F.write('include_morph = '+str(self.include_morph)+'\n')
+                F.write('include_dev = '+str(self.include_dev)+'\n')
+                F.write('include_test = '+str(self.include_test)+'\n')
+                F.write('nb_epochs = '+str(self.nb_epochs)+'\n')
         
         # plot current embeddings:
         if self.include_context:
@@ -359,7 +423,7 @@ class Tagger():
             ax1.set_xlabel(''); ax1.set_ylabel('')
             ax1.set_xticklabels([]); ax1.set_xticks([])
             ax1.set_yticklabels([]); ax1.set_yticks([])
-            sns.plt.savefig(os.sep.join((self.model_path, 'embed_after.pdf')),
+            sns.plt.savefig(os.sep.join((self.model_dir, 'embed_after.pdf')),
                             bbox_inches=0)
 
     def epoch(self, autosave=True):
@@ -367,11 +431,11 @@ class Tagger():
             raise ValueError('Not set up yet... Call Tagger.setup_() first.')
 
         # update nb of epochs ran so far:
-        self.nb_epochs += 1
-        print("-> epoch ", self.nb_epochs, "...")
+        self.curr_nb_epochs += 1
+        print("-> epoch ", self.curr_nb_epochs, "...")
 
         # update learning rate at specific points:
-        if self.nb_epochs % 10 == 0:
+        if self.curr_nb_epochs % 10 == 0:
             old_lr  = self.model.optimizer.lr.get_value()
             new_lr = np.float32(old_lr * 0.5)
             self.model.optimizer.lr.set_value(new_lr)

@@ -11,7 +11,7 @@ import numpy as np
 
 from model import build_model
 
-def index_characters(tokens, v2u=True):
+def index_characters(tokens, v2u=False):
     if v2u:
         vocab = {ch for tok in tokens for ch in tok.lower().replace('v', 'u')}
     else:
@@ -30,7 +30,7 @@ def index_characters(tokens, v2u=True):
     return char_vector_dict, char_idx
 
 def vectorize_tokens(tokens, char_vector_dict,
-                     max_len=15, v2u=True):
+                     max_len=15, v2u=False):
     X = []
     for token in tokens:
         token = token.lower()

@@ -1,0 +1,23 @@
+# Configuration file for the Pandora system
+
+[global]
+nb_encoding_layers = 1
+nb_dense_dims = 300
+batch_size = 100
+nb_left_tokens = 2
+nb_right_tokens = 2
+nb_embedding_dims = 150
+model_dir = models/full
+postcorrect = True
+include_token = True
+include_context = True
+include_lemma = generate
+include_pos = True
+include_morph = label
+include_dev = False
+include_test = True
+nb_filters = 100
+filter_length = 3
+focus_repr = recurrent
+dropout_level = 0.15
+nb_epochs = 1

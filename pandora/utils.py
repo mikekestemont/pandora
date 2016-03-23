@@ -6,7 +6,7 @@ from __future__ import print_function
 import glob
 import codecs
 import re
-
+import ConfigParser
 
 def load_annotated_data(directory='directory', format='conll', nb_instances=None,
                         include_lemma=True, include_morph=True, include_pos=True):
@@ -113,5 +113,20 @@ def stats(tokens, lemmas, known):
     cnt *= 100.0
     print('Nb of unseen tokens:', cnt)
     print('Nb of unique lemmas: ', len(set(lemmas)))
+
+
+def get_param_dict(p):
+    config = ConfigParser.ConfigParser()
+    config.read(p)
+    # parse the param
+    param_dict = dict()
+    for section in config.sections():
+        for name, value in config.items(section):
+            if value == 'True':
+                value = True
+            elif value == 'False':
+                value = False
+            param_dict[name] = value
+    return param_dict
 
 
