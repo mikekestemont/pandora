@@ -63,7 +63,7 @@ class Tagger():
         else:
             self.config_path = config_path
 
-        if not config_path:
+        if not config_path and not load:
             self.nb_encoding_layers = int(nb_encoding_layers)
             self.nb_dense_dims = int(nb_dense_dims)
             self.batch_size = int(batch_size)
@@ -370,7 +370,8 @@ class Tagger():
         # save config file:
         if self.config_path:
             # make sure that we can reproduce parametrization when reloading:
-            shutil.copy(self.config_path, os.sep.join((self.model_dir, 'config.txt')))
+            if not self.config_path == os.sep.join((self.model_dir, 'config.txt')):
+                shutil.copy(self.config_path, os.sep.join((self.model_dir, 'config.txt')))
         else:
             with open(os.sep.join((self.model_dir, 'config.txt')), 'w') as F:
                 F.write('# Parameter file\n\n[global]\n')
