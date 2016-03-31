@@ -176,29 +176,15 @@ def build_model(token_len, token_char_vector_dict,
 
         elif include_lemma == 'label':
             # add pos tag output:
-            m.add_node(Dense(output_dim=nb_dense_dims,
-                             activation='relu'),
+            m.add_node(Dense(output_dim=nb_lemmas),
                        name='lemma_dense1',
                        input='joined')
             m.add_node(Dropout(dropout_level),
                         name='lemma_dense_dropout1',
                         input='lemma_dense1')
-            m.add_node(Dense(output_dim=nb_dense_dims,
-                             activation='relu'),
-                       name='lemma_dense2',
-                       input='lemma_dense_dropout1')
-            m.add_node(Dropout(dropout_level),
-                        name='lemma_dense_dropout2',
-                        input='lemma_dense2')
-            m.add_node(Dense(output_dim=nb_lemmas),
-                       name='lemma_dense3',
-                       input='lemma_dense_dropout2')
-            m.add_node(Dropout(dropout_level),
-                        name='lemma_dense_dropout3',
-                        input='lemma_dense3')
             m.add_node(Activation('softmax'),
                         name='lemma_softmax',
-                        input='lemma_dense_dropout3')
+                        input='lemma_dense_dropout1')
             m.add_output(name='lemma_out', input='lemma_softmax')
 
 

@@ -58,7 +58,7 @@ def load_annotated_file(filepath='text.txt', format='tab', nb_instances=None,
     elif format == 'tab':
         for line in codecs.open(filepath, 'r', 'utf8'):
             line = line.strip()
-            if line:
+            if line and not line[0] == '@':
                 try:
                     comps = line.split()
                     tok = comps[0]

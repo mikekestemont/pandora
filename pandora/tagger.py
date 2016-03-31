@@ -381,7 +381,7 @@ class Tagger():
                 F.write('nb_right_tokens = '+str(self.nb_right_tokens)+'\n')
                 F.write('nb_embedding_dims = '+str(self.nb_embedding_dims)+'\n')
                 F.write('model_dir = '+str(self.model_dir)+'\n')
-                F.write('postcorrect = postcorrect'+str(self.postcorrect)+'\n')
+                F.write('postcorrect = '+str(self.postcorrect)+'\n')
                 F.write('nb_filters = '+str(self.nb_filters)+'\n')
                 F.write('filter_length = '+str(self.filter_length)+'\n')
                 F.write('focus_repr = '+str(self.focus_repr)+'\n')
