@@ -320,6 +320,9 @@ class Tagger():
         test_preds = self.model.predict(test_in,
                                 batch_size=self.batch_size)
 
+        if isinstance(test_preds, np.ndarray):
+            test_preds = [test_preds]
+
         if self.include_lemma:
             print('::: Test scores (lemmas) :::')
             pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=test_preds[self.lemma_out_idx])
@@ -477,6 +480,8 @@ class Tagger():
         # get train preds:
         train_preds = self.model.predict(train_in,
                                 batch_size=self.batch_size)
+        if isinstance(train_preds, np.ndarray):
+            train_preds = [train_preds]
 
         if self.include_dev:
             dev_in = {}
@@ -487,6 +492,8 @@ class Tagger():
 
             dev_preds = self.model.predict(dev_in,
                                     batch_size=self.batch_size)
+            if isinstance(dev_preds, np.ndarray):
+                dev_preds = [dev_preds]
 
         score_dict = {}
         if self.include_lemma:
@@ -563,18 +570,21 @@ class Tagger():
     def annotate(self, tokens):
         X_focus = self.preprocessor.transform(tokens=tokens)['X_focus']
         X_context = self.pretrainer.transform(tokens=tokens)
-
+        
         # get predictions:
-        d = {}
+        new_in = {}
         if self.include_token:
-            d['focus_in'] = X_focus
+            new_in['focus_in'] = X_focus
         if self.include_context:
-            d['context_in'] = X_context
-        preds = self.model.predict(data=d, batch_size=self.batch_size)
+            new_in['context_in'] = X_context
+        preds = self.model.predict(new_in)
 
+        if isinstance(preds, np.ndarray):
+            preds = [preds]
+        
         annotation_dict = {'tokens': tokens}
         if self.include_lemma:
-            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=preds['lemma_out'])
+            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=preds[self.lemma_out_idx])
             annotation_dict['lemmas'] = pred_lemmas
             if self.postcorrect:
                 for i in range(len(pred_lemmas)):
@@ -584,11 +594,11 @@ class Tagger():
                 annotation_dict['postcorrect_lemmas'] = pred_lemmas
 
         if self.include_pos:
-            pred_pos = self.preprocessor.inverse_transform_pos(predictions=preds['pos_out'])
+            pred_pos = self.preprocessor.inverse_transform_pos(predictions=preds[self.pos_out_idx])
             annotation_dict['pos'] = pred_pos
         
         if self.include_morph:
-            pred_morph = self.preprocessor.inverse_transform_morph(predictions=preds['morph_out'])
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=preds[self.morph_out_idx])
             annotation_dict['morph'] = pred_morph
 
         return annotation_dict

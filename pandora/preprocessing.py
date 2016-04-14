@@ -229,7 +229,6 @@ class Preprocessor():
         character index for the output strings.
         """
         pred_lemmas = []
-
         if self.include_lemma == 'generate':
             for pred in predictions:
                 pred_lem = ''

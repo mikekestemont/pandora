@@ -108,7 +108,7 @@ def build_model(token_len, token_char_vector_dict,
 
     # combine subnets:
     if len(subnets) > 1:
-        joined = merge(subnets, mode='concat', concat_axis = -1, name='joined')
+        joined = merge(subnets, mode='concat', name='joined')
     else:
         joined = Activation('linear', name='joined')(subnets[0])
 
@@ -141,9 +141,9 @@ def build_model(token_len, token_char_vector_dict,
                 curr_out = merge([l2r, r2l], name=output_name, mode='sum')
 
             # add lemma decoder
-            lemma_label = TimeDistributed(Dense(output_dim=len(lemma_char_vector_dict),
-                            activation='softmax'),
-                            name='lemma_out')(curr_out)
+            lemma_label = TimeDistributed(Dense(len(lemma_char_vector_dict)),
+                            name='lemma_dense')(curr_out)
+            lemma_label = Activation('softmax', name='lemma_out')(lemma_label)
 
         elif include_lemma == 'label':
             lemma_label = Dense(nb_lemmas,
@@ -217,7 +217,6 @@ def build_model(token_len, token_char_vector_dict,
         outputs.append(morph_label)
 
     loss_dict = {}
-    
     if include_lemma:
         loss_dict['lemma_out'] = 'categorical_crossentropy'
     if include_pos:
