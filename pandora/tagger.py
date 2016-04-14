@@ -151,7 +151,11 @@ class Tagger():
             self.test_tokens = test_data['token']
         if self.include_dev:
             self.dev_tokens = dev_data['token']
+
+        idx_cnt = 0
         if self.include_lemma:
+            self.lemma_out_idx = idx_cnt
+            idx_cnt += 1
             self.train_lemmas = train_data['lemma']
             self.known_lemmas = set(self.train_lemmas)
             if self.include_dev:
@@ -159,12 +163,15 @@ class Tagger():
             if self.include_test:
                 self.test_lemmas = test_data['lemma']
         if self.include_pos:
+            self.pos_out_idx = idx_cnt
+            idx_cnt += 1
             self.train_pos = train_data['pos']
             if self.include_dev:
                 self.dev_pos = dev_data['pos']
             if self.include_test:
                 self.test_pos = test_data['pos']
         if self.include_morph:
+            self.morph_out_idx = idx_cnt
             self.train_morph = train_data['morph']
             if self.include_dev:
                 self.dev_morph = dev_data['morph']
@@ -304,18 +311,18 @@ class Tagger():
         score_dict = {}
 
         # get test predictions:
-        d = {}
+        test_in = {}
         if self.include_token:
-            d['focus_in'] = self.test_X_focus
+            test_in['focus_in'] = self.test_X_focus
         if self.include_context:
-            d['context_in'] = self.test_contexts
+            test_in['context_in'] = self.test_contexts
 
         test_preds = self.model.predict(data=d,
                                 batch_size=self.batch_size)
 
         if self.include_lemma:
             print('::: Test scores (lemmas) :::')
-            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=test_preds['lemma_out'])
+            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=test_preds[self.lemma_out_idx])
             if self.postcorrect:
                 for i in range(len(pred_lemmas)):
                     if pred_lemmas[i] not in self.known_lemmas:
@@ -328,7 +335,7 @@ class Tagger():
 
         if self.include_pos:
             print('::: Test scores (pos) :::')
-            pred_pos = self.preprocessor.inverse_transform_pos(predictions=test_preds['pos_out'])
+            pred_pos = self.preprocessor.inverse_transform_pos(predictions=test_preds[self.pos_out_idx])
             score_dict['test_pos'] = evaluation.single_label_accuracies(gold=self.test_pos,
                                                  silver=pred_pos,
                                                  test_tokens=self.test_tokens,
@@ -336,7 +343,7 @@ class Tagger():
         
         if self.include_morph:     
             print('::: Test scores (morph) :::')
-            pred_morph = self.preprocessor.inverse_transform_morph(predictions=test_preds['morph_out'],
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=test_preds[self.morph_out_idx],
                                                                    threshold=multilabel_threshold)
             if self.include_morph == 'label':
                 score_dict['test_morph'] = evaluation.single_label_accuracies(gold=self.test_morph,
@@ -443,12 +450,13 @@ class Tagger():
             self.model.optimizer.lr.set_value(new_lr)
             print('\t- Lowering learning rate > was:', old_lr, ', now:', new_lr)
 
-        # fit on train:
+        # get inputs and outputs straight:
         train_in, train_out = {}, {}
         if self.include_token:
             train_in['focus_in'] = self.train_X_focus
         if self.include_context:
             train_in['context_in'] = self.train_contexts
+
         if self.include_lemma:
             train_out['lemma_out'] = self.train_X_lemma
         if self.include_pos:
@@ -471,27 +479,26 @@ class Tagger():
                                 batch_size=self.batch_size)
 
         if self.include_dev:
-            # get dev predictions:
-            d = {}
+            dev_in = {}
             if self.include_token:
-                d['focus_in'] = self.dev_X_focus
+                dev_in['focus_in'] = self.dev_X_focus
             if self.include_context:
-                d['context_in'] = self.dev_contexts
+                dev_in['context_in'] = self.dev_contexts
 
-            dev_preds = self.model.predict(data=d,
+            dev_preds = self.model.predict(dev_in,
                                     batch_size=self.batch_size)
 
         score_dict = {}
         if self.include_lemma:
             print('::: Train scores (lemmas) :::')
-            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=train_preds[0])
+            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=train_preds[self.lemma_out_idx])
             score_dict['train_lemma'] = evaluation.single_label_accuracies(gold=self.train_lemmas,
                                                  silver=pred_lemmas,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
             if self.include_dev:
                 print('::: Dev scores (lemmas) :::')
-                pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=dev_preds['lemma_out'])
+                pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=dev_preds[self.lemma_out_idx])
                 if self.postcorrect:
                     for i in range(len(pred_lemmas)):
                         if pred_lemmas[i] not in self.known_lemmas:
@@ -504,14 +511,14 @@ class Tagger():
 
         if self.include_pos:
             print('::: Train scores (pos) :::')
-            pred_pos = self.preprocessor.inverse_transform_pos(predictions=train_preds[1])
+            pred_pos = self.preprocessor.inverse_transform_pos(predictions=train_preds[self.pos_out_idx])
             score_dict['train_pos'] = evaluation.single_label_accuracies(gold=self.train_pos,
                                                  silver=pred_pos,
                                                  test_tokens=self.train_tokens,
                                                  known_tokens=self.preprocessor.known_tokens)
             if self.include_dev:
                 print('::: Dev scores (pos) :::')
-                pred_pos = self.preprocessor.inverse_transform_pos(predictions=dev_preds['pos_out'])
+                pred_pos = self.preprocessor.inverse_transform_pos(predictions=dev_preds[self.pos_out_idx])
                 score_dict['dev_pos'] = evaluation.single_label_accuracies(gold=self.dev_pos,
                                                      silver=pred_pos,
                                                      test_tokens=self.dev_tokens,
@@ -519,7 +526,7 @@ class Tagger():
         
         if self.include_morph:
             print('::: Train scores (morph) :::')
-            pred_morph = self.preprocessor.inverse_transform_morph(predictions=train_preds[2])
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=train_preds[self.morph_out_idx])
             if self.include_morph == 'label':
                 score_dict['train_morph'] = evaluation.single_label_accuracies(gold=self.train_morph,
                                                  silver=pred_morph,
@@ -534,7 +541,7 @@ class Tagger():
 
             if self.include_dev:
                 print('::: Dev scores (morph) :::')
-                pred_morph = self.preprocessor.inverse_transform_morph(predictions=dev_preds['morph_out'])
+                pred_morph = self.preprocessor.inverse_transform_morph(predictions=dev_preds[self.morph_out_idx])
                 if self.include_morph == 'label':
                     score_dict['dev_morph'] = evaluation.single_label_accuracies(gold=self.train_morph,
                                                      silver=pred_morph,

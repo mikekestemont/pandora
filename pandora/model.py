@@ -29,8 +29,8 @@ def build_model(token_len, token_char_vector_dict,
                 ):
     
     
-    inputs = []
-    in_subnets, out_subnets = [], []
+    inputs, outputs = [], []
+    subnets = []
     
     if include_token:
         # add input layer:
@@ -86,7 +86,7 @@ def build_model(token_len, token_char_vector_dict,
         else:
             raise ValueError('Parameter `focus_repr` not understood: use "recurrent" or "convolutions".')
 
-        in_subnets.append(token_subnet)
+        subnets.append(token_subnet)
 
     if include_context:
         context_input = Input(shape=(nb_context_tokens,), dtype='int32', name='context_in')
@@ -104,13 +104,13 @@ def build_model(token_len, token_char_vector_dict,
         context_subnet = Dropout(dropout_level, name='context_dropout2')(context_subnet)
         context_subnet = Activation('relu', name='context_out')(context_subnet)
 
-        in_subnets.append(context_subnet)
+        subnets.append(context_subnet)
 
     # combine subnets:
-    if len(in_subnets) > 1:
-        joined = merge(in_subnets, mode='concat', concat_axis = -1, name='joined')
+    if len(subnets) > 1:
+        joined = merge(subnets, mode='concat', concat_axis = -1, name='joined')
     else:
-        joined = Activation('linear', name='joined')(in_subnets[0])
+        joined = Activation('linear', name='joined')(subnets[0])
 
     if include_lemma:
         if include_lemma == 'generate':
@@ -153,7 +153,7 @@ def build_model(token_len, token_char_vector_dict,
             lemma_label = Activation('softmax',
                                 name='lemma_out')(lemma_label)
 
-        out_subnets.append(lemma_label)
+        outputs.append(lemma_label)
 
     if include_pos:
         pos_label = Dense(nb_dense_dims,
@@ -173,7 +173,7 @@ def build_model(token_len, token_char_vector_dict,
                             name='pos_dense_dropout3')(pos_label)
         pos_label = Activation('softmax',
                                 name='pos_out')(pos_label)
-        out_subnets.append(pos_label)
+        outputs.append(pos_label)
 
     if include_morph:
         if include_morph == 'label':
@@ -222,7 +222,7 @@ def build_model(token_len, token_char_vector_dict,
                         input='morph_dense_dropout3')
             m.add_output(name='morph_out', input='morph_tanh')
 
-        out_subnets.append(morph_label)
+        outputs.append(morph_label)
 
     loss_dict = {}
     
@@ -236,7 +236,7 @@ def build_model(token_len, token_char_vector_dict,
         elif include_morph == 'multilabel':
           loss_dict['morph_out'] = 'binary_crossentropy'
 
-    model = Model(input=inputs, output=out_subnets)
+    model = Model(input=inputs, output=outputs)
     model.compile(optimizer='RMSprop', loss=loss_dict)
 
     return model
