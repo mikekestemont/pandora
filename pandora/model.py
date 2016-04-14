@@ -196,31 +196,23 @@ def build_model(token_len, token_char_vector_dict,
                                     name='morph_out')(morph_label)
 
         elif include_morph == 'multilabel':
-            # add morph tag output:
-            m.add_node(Dense(output_dim=nb_dense_dims,
-                             activation='relu'),
-                       name='morph_dense1',
-                       input='joined')
-            m.add_node(Dropout(dropout_level),
-                        name='morph_dense_dropout1',
-                        input='morph_dense1')
-            m.add_node(Dense(output_dim=nb_dense_dims,
-                             activation='relu'),
-                       name='morph_dense2',
-                       input='morph_dense_dropout1')
-            m.add_node(Dropout(dropout_level),
-                        name='morph_dense_dropout2',
-                        input='morph_dense2')
-            m.add_node(Dense(output_dim=nb_morph_cats),
-                       name='morph_dense3',
-                       input='morph_dense_dropout2')
-            m.add_node(Dropout(dropout_level),
-                        name='morph_dense_dropout3',
-                        input='morph_dense3')
-            m.add_node(Activation('tanh'),
-                        name='morph_tanh',
-                        input='morph_dense_dropout3')
-            m.add_output(name='morph_out', input='morph_tanh')
+            morph_label = Dense(nb_dense_dims,
+                                activation='relu',
+                                name='morph_dense1')(joined)
+            morph_label = Dropout(dropout_level,
+                                name='morph_dense_dropout1')(morph_label)
+            morph_label = Dense(nb_dense_dims,
+                                activation='relu',
+                                name='morph_dense2')(morph_label)
+            morph_label = Dropout(dropout_level,
+                                name='morph_dense_dropout2')(morph_label)
+            morph_label = Dense(nb_morph_cats,
+                                activation='relu',
+                                name='morph_dense3')(morph_label)
+            morph_label = Dropout(dropout_level,
+                                name='morph_dense_dropout3')(morph_label)
+            morph_label = Activation('tanh',
+                                    name='morph_out')(morph_label)
 
         outputs.append(morph_label)
 

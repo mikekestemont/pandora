@@ -317,7 +317,7 @@ class Tagger():
         if self.include_context:
             test_in['context_in'] = self.test_contexts
 
-        test_preds = self.model.predict(data=d,
+        test_preds = self.model.predict(test_in,
                                 batch_size=self.batch_size)
 
         if self.include_lemma:
