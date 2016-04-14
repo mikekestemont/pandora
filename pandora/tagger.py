@@ -398,7 +398,8 @@ class Tagger():
         
         # plot current embeddings:
         if self.include_context:
-            weights = self.model.nodes['context_embedding'].get_weights()[0]
+            layer_dict = dict([(layer.name, layer) for layer in self.model.layers])
+            weights = layer_dict['context_embedding'].get_weights()[0]
             X = np.array([weights[self.pretrainer.train_token_vocab.index(w), :] \
                     for w in self.pretrainer.mfi], dtype='float32')
             # dimension reduction:
@@ -443,30 +444,30 @@ class Tagger():
             print('\t- Lowering learning rate > was:', old_lr, ', now:', new_lr)
 
         # fit on train:
-        full_train_d = {}
+        train_in, train_out = {}, {}
         if self.include_token:
-            full_train_d['focus_in'] = self.train_X_focus
+            train_in['focus_in'] = self.train_X_focus
         if self.include_context:
-            full_train_d['context_in'] = self.train_contexts
+            train_in['context_in'] = self.train_contexts
         if self.include_lemma:
-            full_train_d['lemma_out'] = self.train_X_lemma
+            train_out['lemma_out'] = self.train_X_lemma
         if self.include_pos:
-            full_train_d['pos_out'] = self.train_X_pos
+            train_out['pos_out'] = self.train_X_pos
         if self.include_morph:
-            full_train_d['morph_out'] = self.train_X_morph
+            train_out['morph_out'] = self.train_X_morph
         
-        self.model.fit(data=full_train_d,
+        self.model.fit(train_in, train_out,
               nb_epoch = 1,
               shuffle = True,
               batch_size = self.batch_size)
 
         # get train loss:
-        train_loss = self.model.evaluate(data=full_train_d,
+        train_loss = self.model.evaluate(train_in, train_out,
                                 batch_size=self.batch_size)
         print("\t - total train loss:\t{:.3}".format(train_loss))
 
         # get train preds:
-        train_preds = self.model.predict(data=full_train_d,
+        train_preds = self.model.predict(train_in,
                                 batch_size=self.batch_size)
 
         if self.include_dev:
@@ -483,7 +484,7 @@ class Tagger():
         score_dict = {}
         if self.include_lemma:
             print('::: Train scores (lemmas) :::')
-            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=train_preds['lemma_out'])
+            pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=train_preds[0])
             score_dict['train_lemma'] = evaluation.single_label_accuracies(gold=self.train_lemmas,
                                                  silver=pred_lemmas,
                                                  test_tokens=self.train_tokens,
@@ -503,7 +504,7 @@ class Tagger():
 
         if self.include_pos:
             print('::: Train scores (pos) :::')
-            pred_pos = self.preprocessor.inverse_transform_pos(predictions=train_preds['pos_out'])
+            pred_pos = self.preprocessor.inverse_transform_pos(predictions=train_preds[1])
             score_dict['train_pos'] = evaluation.single_label_accuracies(gold=self.train_pos,
                                                  silver=pred_pos,
                                                  test_tokens=self.train_tokens,
@@ -518,7 +519,7 @@ class Tagger():
         
         if self.include_morph:
             print('::: Train scores (morph) :::')
-            pred_morph = self.preprocessor.inverse_transform_morph(predictions=train_preds['morph_out'])
+            pred_morph = self.preprocessor.inverse_transform_morph(predictions=train_preds[2])
             if self.include_morph == 'label':
                 score_dict['train_morph'] = evaluation.single_label_accuracies(gold=self.train_morph,
                                                  silver=pred_morph,

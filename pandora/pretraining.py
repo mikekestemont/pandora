@@ -105,10 +105,10 @@ class Pretrainer:
                 idxs = [0] + idxs
             ints.extend(idxs)
 
-            # RIGHT CONTEXT WILL INCLUDE FOCUS TOKEN
-            right_context_tokens = [tokens[curr_idx+t]\
+            # vectorize right context
+            right_context_tokens = [tokens[curr_idx+(t+1)]\
                                         for t in range(self.nb_right_tokens)\
-                                            if curr_idx+t < len(tokens)]
+                                            if curr_idx+(t+1) < len(tokens)]
             idxs = []
             if right_context_tokens:
                 idxs = [self.token_idx[t] if t in self.token_idx else 0 \

@@ -8,9 +8,15 @@ import codecs
 import re
 import ConfigParser
 
-def load_annotated_data(directory='directory', format='conll', nb_instances=None,
+def load_annotated_dir(directory='directory', format='tab', nb_instances=None,
                         include_lemma=True, include_morph=True, include_pos=True):
-    instances = []
+    instances = {'token': []}
+    if include_lemma:
+        instances['lemma'] = []
+    if include_pos:
+        instances['pos'] = []
+    if include_morph:
+        instances['morph'] = []
     for filepath in glob.glob(directory+'/*'):
         insts = load_annotated_file(filepath=filepath,
                                     format=format,
@@ -18,7 +24,13 @@ def load_annotated_data(directory='directory', format='conll', nb_instances=None
                                     include_lemma=include_lemma,
                                     include_morph=include_morph,
                                     include_pos=include_pos)
-        instances.extend(insts)
+        instances['token'].extend(insts['token'])
+        if include_lemma:
+            instances['lemma'].extend(insts['lemma'])
+        if include_pos:
+            instances['pos'].extend(insts['pos'])
+        if include_morph:
+            instances['morph'].extend(insts['morph'])
     return instances
 
 def load_annotated_file(filepath='text.txt', format='tab', nb_instances=None,
