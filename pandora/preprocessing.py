@@ -3,6 +3,7 @@
 
 from __future__ import print_function
 from operator import itemgetter
+from collections import Counter
 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_extraction import DictVectorizer
@@ -11,12 +12,15 @@ import numpy as np
 
 from model import build_model
 
-def index_characters(tokens, v2u=False):
+def index_characters(tokens, focus_repr='recurrent', v2u=False):
     if v2u:
         vocab = {ch for tok in tokens for ch in tok.lower().replace('v', 'u')}
     else:
         vocab = {ch for tok in tokens for ch in tok.lower()}
-    vocab = vocab.union({'$', '|'})
+
+    if focus_repr == 'recurrent':
+        vocab = vocab.union({'$', '|', '%'})
+
     char_vocab = tuple(sorted(vocab))
     char_vector_dict, char_idx = {}, {}
     filler = np.zeros(len(char_vocab), dtype='float32')
@@ -29,7 +33,7 @@ def index_characters(tokens, v2u=False):
 
     return char_vector_dict, char_idx
 
-def vectorize_tokens(tokens, char_vector_dict,
+def vectorize_tokens(tokens, char_vector_dict, focus_repr,
                      max_len=15, v2u=False):
     X = []
     for token in tokens:
@@ -38,7 +42,8 @@ def vectorize_tokens(tokens, char_vector_dict,
             token.lower().replace('v', 'u')
         x = vectorize_token(seq=token,
                             char_vector_dict=char_vector_dict,
-                            max_len=max_len)
+                            max_len=max_len,
+                            focus_repr=focus_repr)
         X.append(x)
 
     return np.asarray(X, dtype='float32')
@@ -57,30 +62,35 @@ def vectorize_lemmas(lemmas, char_vector_dict,
     X = np.asarray(X, dtype='float32')
     return X
 
-def vectorize_token(seq, char_vector_dict, max_len):
-    # cut, if needed:
-    seq = seq[:(max_len - 1)]
-    seq += '|'
+def vectorize_token(seq, char_vector_dict, max_len, focus_repr):
 
-    while len(seq) < max_len:
-        seq = seq + '$'
+    if focus_repr == 'recurrent':
+        # cut, if needed:
+        seq = seq[:(max_len - 2)]
+        seq = '%' + seq + '|'
+        seq = seq[::-1] # reverse order (cf. paper)!
+    elif focus_repr == 'convolutions':
+        seq = seq[:max_len]
 
-    seq = seq[::-1] # reverse order (cf. paper)!
+    filler = np.zeros(len(char_vector_dict), dtype='float32')
 
     seq_X = []
-    filler = np.zeros(len(char_vector_dict), dtype='float32')
     for char in seq:
         try:
             seq_X.append(char_vector_dict[char])
         except KeyError:
             seq_X.append(filler)
-
-    return np.vstack(seq_X)
+    
+    while len(seq_X) < max_len:
+        seq_X.append(filler)
+    
+    return np.array(seq_X)
 
 def vectorize_lemma(seq, char_vector_dict, max_len):
     # cut, if needed:
-    seq = seq[:(max_len - 1)]
-    seq += '|'
+    seq = seq[:(max_len - 2)]
+    seq = '%'+seq+'|'
+
     # pad, if needed:
     while len(seq) < max_len:
         seq += '$'
@@ -94,7 +104,7 @@ def vectorize_lemma(seq, char_vector_dict, max_len):
         except KeyError:
             seq_X.append(filler)
 
-    return np.vstack(seq_X)
+    return np.array(seq_X)
 
 def parse_morphs(morph):
     morph_dicts = []
@@ -115,11 +125,19 @@ class Preprocessor():
     def __init__(self):
         pass
 
-    def fit(self, tokens, lemmas, pos, morph, include_lemma, include_morph):
+    def fit(self, tokens, lemmas, pos, morph, include_lemma,
+            include_morph, focus_repr, max_token_len = None,
+            min_lem_cnt = 1):
+        
+        if max_token_len:
+            self.max_token_len = max_token_len
+        else:
+            self.max_token_len = len(max(tokens, key=len))+1
+
+        self.focus_repr = focus_repr
         # fit focus tokens:
-        self.max_token_len = len(max(tokens, key=len))+1
         self.token_char_dict, self.token_char_idx = \
-            index_characters(tokens)
+            index_characters(tokens, focus_repr=self.focus_repr)
         self.known_tokens = set(tokens)
         
         # fit lemmas:
@@ -131,13 +149,16 @@ class Preprocessor():
                 self.lemma_char_dict, self.lemma_char_idx = \
                     index_characters(lemmas)
             elif include_lemma == 'label':
+                self.min_lem_cnt = min_lem_cnt
+                cnt = Counter(lemmas)
+                trunc_lems = [k for k, v in cnt.items() if v >= self.min_lem_cnt]
                 self.lemma_encoder = LabelEncoder()
-                self.lemma_encoder.fit(lemmas + ['<UNK>']) # do we need this?
+                self.lemma_encoder.fit(trunc_lems + ['<UNK>'])
 
         # fit pos labels:
         if pos:
             self.pos_encoder = LabelEncoder()
-            self.pos_encoder.fit(pos + ['<UNK>']) # do we need this?
+            self.pos_encoder.fit(pos + ['<UNK>'])
 
         if morph:
             self.include_morph = include_morph
@@ -168,7 +189,9 @@ class Preprocessor():
         X_focus = vectorize_tokens(\
                     tokens=tokens,
                     char_vector_dict=self.token_char_dict,
-                    max_len=self.max_token_len)
+                    max_len=self.max_token_len,
+                    focus_repr=self.focus_repr)
+
         returnables = {'X_focus': X_focus}
 
         if lemmas and self.include_lemma:
@@ -235,7 +258,9 @@ class Preprocessor():
                 for positions in pred:
                     top_idx = np.argmax(positions) # winning position
                     c = self.lemma_char_idx[top_idx] # look up corresponding char
-                    if c in ('|', '$'):
+                    if c in ('$', '%'):
+                        continue
+                    if c == '|':
                         break
                     else:
                         pred_lem += c # add character

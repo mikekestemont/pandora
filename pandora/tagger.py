@@ -51,10 +51,14 @@ class Tagger():
                  filter_length = 3,
                  focus_repr = 'recurrent',
                  dropout_level = .1,
-                 load=False,
-                 nb_epochs=15,
+                 load = False,
+                 nb_epochs = 15,
+                 min_token_freq_emb = 5,
+                 halve_lr_at = 10,
+                 max_token_len = None,
+                 min_lem_cnt = 1,
                  ):
-
+        
         if load:
             if model_dir:
                 self.config_path = os.sep.join((model_dir, 'config.txt'))
@@ -84,10 +88,15 @@ class Tagger():
             self.include_morph = include_morph
             self.include_dev = include_dev
             self.include_test = include_test
+            self.min_token_freq_emb = min_token_freq_emb
             self.nb_epochs = int(nb_epochs)
+            self.halve_lr_at = int(halve_lr_at)
+            self.max_token_len = int(max_token_len)
+            self.min_lem_cnt = int(min_lem_cnt)
 
         else:
             param_dict = utils.get_param_dict(self.config_path)
+            print('Using params from config file: ', param_dict)
             self.nb_encoding_layers = int(param_dict['nb_encoding_layers'])
             self.nb_epochs = int(param_dict['nb_epochs'])
             self.nb_dense_dims = int(param_dict['nb_dense_dims'])
@@ -97,7 +106,7 @@ class Tagger():
             self.nb_context_tokens = self.nb_left_tokens + self.nb_right_tokens
             self.nb_embedding_dims = int(param_dict['nb_embedding_dims'])
             self.model_dir = param_dict['model_dir']
-            self.postcorrect = param_dict['postcorrect']
+            self.postcorrect = bool(param_dict['postcorrect'])
             self.nb_filters = int(param_dict['nb_filters'])
             self.filter_length = int(param_dict['filter_length'])
             self.focus_repr = param_dict['focus_repr']
@@ -109,6 +118,10 @@ class Tagger():
             self.include_morph = param_dict['include_morph']
             self.include_dev = param_dict['include_dev']
             self.include_test = param_dict['include_test']
+            self.min_token_freq_emb = int(param_dict['min_token_freq_emb'])
+            self.halve_lr_at = int(param_dict['halve_lr_at'])
+            self.max_token_len = int(param_dict['max_token_len'])
+            self.min_lem_cnt = int(param_dict['min_lem_cnt'])
         
         # create a models directory if it isn't there already:
         if not os.path.isdir(self.model_dir):
@@ -136,9 +149,30 @@ class Tagger():
         print('Re-building model...')
         self.model = model_from_json(open(os.sep.join((self.model_dir, 'model_architecture.json'))).read())
         self.model.load_weights(os.sep.join((self.model_dir, 'model_weights.hdf5')))
-        print('Loading known lemmas...')
-        self.known_lemmas = pickle.load(open(os.sep.join((self.model_dir, \
+
+        loss_dict = {}
+        idx_cnt = 0
+        if self.include_lemma:
+            loss_dict['lemma_out'] = 'categorical_crossentropy'
+            self.lemma_out_idx = idx_cnt
+            idx_cnt += 1
+            print('Loading known lemmas...')
+            self.known_lemmas = pickle.load(open(os.sep.join((self.model_dir, \
                                     'known_lemmas.p')), 'rb'))
+
+        if self.include_pos:
+            loss_dict['pos_out'] = 'categorical_crossentropy'
+            self.pos_out_idx = idx_cnt
+            idx_cnt += 1
+        if self.include_morph:
+            self.morph_out_idx = idx_cnt
+            idx_cnt += 1
+            if self.include_morph == 'label':
+              loss_dict['morph_out'] = 'categorical_crossentropy'
+            elif self.include_morph == 'multilabel':
+              loss_dict['morph_out'] = 'binary_crossentropy'
+
+        self.model.compile(optimizer='adadelta', loss=loss_dict)
 
     def setup_to_train(self, train_data=None, dev_data=None, test_data=None):
         # create a model directory:
@@ -183,10 +217,15 @@ class Tagger():
                                                pos=self.train_pos,
                                                morph=self.train_morph,
                                                include_lemma=self.include_lemma,
-                                               include_morph=self.include_morph)
+                                               include_morph=self.include_morph,
+                                               max_token_len=self.max_token_len,
+                                               focus_repr=self.focus_repr,
+                                               min_lem_cnt=self.min_lem_cnt,
+                                               )
         self.pretrainer = Pretrainer(nb_left_tokens=self.nb_left_tokens,
                                      nb_right_tokens=self.nb_right_tokens,
-                                     size=self.nb_embedding_dims)
+                                     size=self.nb_embedding_dims,
+                                     minimum_count=self.min_token_freq_emb)
         self.pretrainer.fit(tokens=self.train_tokens)
 
         train_transformed = self.preprocessor.transform(tokens=self.train_tokens,
@@ -325,6 +364,7 @@ class Tagger():
 
         if self.include_lemma:
             print('::: Test scores (lemmas) :::')
+            
             pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=test_preds[self.lemma_out_idx])
             if self.postcorrect:
                 for i in range(len(pred_lemmas)):
@@ -374,9 +414,10 @@ class Tagger():
         # save pretrainer:
         with open(os.sep.join((self.model_dir, 'pretrainer.p')), 'wb') as f:
             pickle.dump(self.pretrainer, f)
-        # save known lemmas:
-        with open(os.sep.join((self.model_dir, 'known_lemmas.p')), 'wb') as f:
-            pickle.dump(self.known_lemmas, f)
+        if self.include_lemma:
+            # save known lemmas:
+            with open(os.sep.join((self.model_dir, 'known_lemmas.p')), 'wb') as f:
+                pickle.dump(self.known_lemmas, f)
         # save config file:
         if self.config_path:
             # make sure that we can reproduce parametrization when reloading:
@@ -405,13 +446,18 @@ class Tagger():
                 F.write('include_dev = '+str(self.include_dev)+'\n')
                 F.write('include_test = '+str(self.include_test)+'\n')
                 F.write('nb_epochs = '+str(self.nb_epochs)+'\n')
+                F.write('halve_lr_at = '+str(self.halve_lr_at)+'\n')
+                F.write('max_token_len = '+str(self.max_token_len)+'\n')
+                F.write('min_token_freq_emb = '+str(self.min_token_freq_emb)+'\n')
+                F.write('min_lem_cnt = '+str(self.min_lem_cnt)+'\n')
         
         # plot current embeddings:
         if self.include_context:
             layer_dict = dict([(layer.name, layer) for layer in self.model.layers])
             weights = layer_dict['context_embedding'].get_weights()[0]
             X = np.array([weights[self.pretrainer.train_token_vocab.index(w), :] \
-                    for w in self.pretrainer.mfi], dtype='float32')
+                    for w in self.pretrainer.mfi \
+                      if w in self.pretrainer.train_token_vocab], dtype='float32')
             # dimension reduction:
             tsne = TSNE(n_components=2)
             coor = tsne.fit_transform(X) # unsparsify
@@ -446,12 +492,13 @@ class Tagger():
         self.curr_nb_epochs += 1
         print("-> epoch ", self.curr_nb_epochs, "...")
 
-        # update learning rate at specific points:
-        if self.curr_nb_epochs % 10 == 0:
-            old_lr  = self.model.optimizer.lr.get_value()
-            new_lr = np.float32(old_lr * 0.5)
-            self.model.optimizer.lr.set_value(new_lr)
-            print('\t- Lowering learning rate > was:', old_lr, ', now:', new_lr)
+        if self.curr_nb_epochs and self.halve_lr_at:
+            # update learning rate at specific points:
+            if self.curr_nb_epochs % self.halve_lr_at == 0:
+                old_lr  = self.model.optimizer.lr.get_value()
+                new_lr = np.float32(old_lr * 0.5)
+                self.model.optimizer.lr.set_value(new_lr)
+                print('\t- Lowering learning rate > was:', old_lr, ', now:', new_lr)
 
         # get inputs and outputs straight:
         train_in, train_out = {}, {}
@@ -471,11 +518,6 @@ class Tagger():
               nb_epoch = 1,
               shuffle = True,
               batch_size = self.batch_size)
-
-        # get train loss:
-        train_loss = self.model.evaluate(train_in, train_out,
-                                batch_size=self.batch_size)
-        print("\t - total train loss:\t{:.3}".format(train_loss))
 
         # get train preds:
         train_preds = self.model.predict(train_in,
@@ -506,12 +548,18 @@ class Tagger():
             if self.include_dev:
                 print('::: Dev scores (lemmas) :::')
                 pred_lemmas = self.preprocessor.inverse_transform_lemmas(predictions=dev_preds[self.lemma_out_idx])
+                score_dict['dev_lemma'] = evaluation.single_label_accuracies(gold=self.dev_lemmas,
+                                                     silver=pred_lemmas,
+                                                     test_tokens=self.dev_tokens,
+                                                     known_tokens=self.preprocessor.known_tokens)
+                
                 if self.postcorrect:
+                    print('::: Dev scores (lemmas) -> postcorrected :::')
                     for i in range(len(pred_lemmas)):
                         if pred_lemmas[i] not in self.known_lemmas:
                             pred_lemmas[i] = min(self.known_lemmas,
                                             key=lambda x: editdistance.eval(x, pred_lemmas[i]))
-                score_dict['dev_lemma'] = evaluation.single_label_accuracies(gold=self.dev_lemmas,
+                    score_dict['dev_lemma_postcorrect'] = evaluation.single_label_accuracies(gold=self.dev_lemmas,
                                                      silver=pred_lemmas,
                                                      test_tokens=self.dev_tokens,
                                                      known_tokens=self.preprocessor.known_tokens)
@@ -562,10 +610,8 @@ class Tagger():
 
         if autosave:
             self.save()
-
+        
         return score_dict
-
-
 
     def annotate(self, tokens):
         X_focus = self.preprocessor.transform(tokens=tokens)['X_focus']

@@ -1,6 +1,9 @@
 #!usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+import sys
+
 import pandora.utils
 from pandora.tagger import Tagger
 
@@ -8,52 +11,49 @@ import os, codecs
 
 def main():
     print('::: started :::')
+    cf_path = sys.argv[1]
+    params = pandora.utils.get_param_dict(cf_path)
+    params['config_path'] = cf_path
     
-    params = pandora.utils.get_param_dict('config.txt')
+    train_data = pandora.utils.load_annotated_file('data/capitula_classic/train0.',
+    #train_data = pandora.utils.load_annotated_dir('data/mdu/all_train',
+                                            format='tab',
+                                            extension='.tab',
+                                            include_pos=params['include_pos'],
+                                            include_lemma=params['include_lemma'],
+                                            include_morph=params['include_morph'],
+                                            nb_instances=None)
+    #dev_data = pandora.utils.load_annotated_file('data/capitula_classic/test0.tsv',
+    dev_data = pandora.utils.load_annotated_dir('data/mdu/all_test',
+                                            format='tab',
+                                            extension='.tab',
+                                            include_pos=params['include_pos'],
+                                            include_lemma=params['include_lemma'],
+                                            include_morph=params['include_morph'],
+                                            nb_instances=None)
 
-    train_data = pandora.utils.load_annotated_file('data/capitula_classic/train0.tsv',
-    #train_data = pandora.utils.load_annotated_file('data/mdu/cg-lit/cg-lit_train.tab',
-                                            format='tab',
-                                            include_pos=params['include_pos'],
-                                            include_lemma=params['include_lemma'],
-                                            include_morph=params['include_morph'],
-                                            nb_instances=10000)
-    test_data = pandora.utils.load_annotated_file('data/capitula_classic/test0.tsv',
+    #test_data = pandora.utils.load_annotated_file('data/capitula_classic/test0.tsv',
     #dev_data = pandora.utils.load_annotated_file('data/mdu/cg-lit/cg-lit_dev.tab',
-                                            format='tab',
-                                            include_pos=params['include_pos'],
-                                            include_lemma=params['include_lemma'],
-                                            include_morph=params['include_morph'],
-                                            nb_instances=100)
+    #dev_data = pandora.utils.load_annotated_file('data/EMDu/train.txt',
+    #test_data = pandora.utils.load_annotated_file('data/mdu/cg-lit/cg-lit_test.tab',
+    #                                        format='tab',
+    #                                        include_pos=params['include_pos'],
+    #                                        include_lemma=params['include_lemma'],
+    #                                        include_morph=params['include_morph'],
+    #                                        nb_instances=None)
+
     
     tagger = Tagger(**params)
     tagger.setup_to_train(train_data=train_data,
                           dev_data=dev_data)
 
-    tagger.train()
-    
-    tagger.test()
-    tagger.save()
-    
-    tagger = Tagger(load=True, model_dir='models/full')
+    for i in range(int(params['nb_epochs'])):
+        tagger.epoch()
+        tagger.save()
 
-    print('annotating...')
-    orig_path = 'data/12C/orig/'
-    new_path = 'data/12C/tagged/'
-    for filename in os.listdir(orig_path):
-        if not filename.endswith('.txt'):
-            continue
-        unseen_tokens = pandora.utils.load_unannotated_file(orig_path + filename,
-                                                         nb_instances=100,
-                                                         tokenized_input=False)
-        annotations = tagger.annotate(unseen_tokens)
-        with codecs.open(new_path + filename, 'w', 'utf8') as f:
-            if postcorrect:
-                for t, l, pl, p, m in zip(annotations['tokens'], annotations['lemmas'], annotations['postcorrect_lemmas'], annotations['pos'], annotations['morph']):
-                    f.write(' '.join((t, l, pl, p, m))+'\n')
-            else:
-                for t, l, p, m in zip(annotations['tokens'], annotations['lemmas'], annotations['pos'], annotations['morph']):
-                    f.write(' '.join((t, l, p, m))+'\n')
+    tagger.save()
+    #tagger = Tagger(load=True, model_dir='models/mdu_all')
+
     
     
     print('::: ended :::')

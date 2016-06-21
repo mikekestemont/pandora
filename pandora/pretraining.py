@@ -36,7 +36,7 @@ class Pretrainer:
 
     def __init__(self, nb_left_tokens, nb_right_tokens,
                  sentence_len=100, window=5,
-                 min_count=1, size=300, nb_mfi=500,
+                 minimum_count=2, size=300, nb_mfi=500,
                  nb_workers=10, nb_negative=5,
                  ):
         self.nb_left_tokens = nb_left_tokens
@@ -44,7 +44,7 @@ class Pretrainer:
         self.size = size
         self.nb_mfi = nb_mfi
         self.window = window
-        self.min_count = min_count
+        self.minimum_count = minimum_count
         self.nb_workers = nb_workers
         self.nb_negative = nb_negative
 
@@ -56,7 +56,7 @@ class Pretrainer:
         # train embeddings:
         self.w2v_model = Word2Vec(self.sentence_iterator,
                              window=self.window,
-                             min_count=self.min_count,
+                             min_count=self.minimum_count,
                              size=self.size,
                              workers=self.nb_workers,
                              negative=self.nb_negative)
@@ -65,9 +65,9 @@ class Pretrainer:
 
         # build an index of the train tokens
         # which occur at least min_count times:
-        self.token_idx = {'<unk>': 0}
+        self.token_idx = {}
         for k, v in Counter(tokens).items():
-            if v >= self.min_count:
+            if v >= self.minimum_count:
                 self.token_idx[k] = len(self.token_idx)
 
         # create an ordered vocab:
@@ -97,6 +97,7 @@ class Pretrainer:
             left_context_tokens = [tokens[curr_idx-(t+1)]\
                                     for t in range(self.nb_left_tokens)\
                                         if curr_idx-(t+1) >= 0][::-1]
+            
             idxs = []
             if left_context_tokens:
                 idxs = [self.token_idx[t] if t in self.token_idx else 0 \
@@ -109,6 +110,7 @@ class Pretrainer:
             right_context_tokens = [tokens[curr_idx+(t+1)]\
                                         for t in range(self.nb_right_tokens)\
                                             if curr_idx+(t+1) < len(tokens)]
+            
             idxs = []
             if right_context_tokens:
                 idxs = [self.token_idx[t] if t in self.token_idx else 0 \

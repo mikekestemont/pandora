@@ -8,6 +8,7 @@ from keras.layers import *
 from keras.layers.embeddings import Embedding
 from keras.optimizers import Adam
 from keras.objectives import categorical_crossentropy
+from keras.optimizers import Adam, RMSprop
 
 def build_model(token_len, token_char_vector_dict,
                 nb_encoding_layers, nb_dense_dims,
@@ -27,7 +28,6 @@ def build_model(token_len, token_char_vector_dict,
                 focus_repr = 'recurrent',
                 dropout_level = .15,
                 ):
-    
     
     inputs, outputs = [], []
     subnets = []
@@ -70,12 +70,13 @@ def build_model(token_len, token_char_vector_dict,
                     curr_out = merge([l2r, r2l], name='encoder_'+str(i+1), mode='sum')
 
         elif focus_repr == 'convolutions':
-            token_subnet = Convolution1D(input_dim=len(token_char_vector_dict),
+            token_subnet = Convolution1D(input_shape=(token_len, len(token_char_vector_dict)),
                                          nb_filter=nb_filters,
                                          filter_length=filter_length,
                                          activation='relu',
                                          border_mode='valid',
                                          subsample_length=1,
+                                         init='glorot_uniform',
                                          name='focus_conv')(token_input)
             token_subnet = Flatten(name='focus_flat')(token_subnet)
             token_subnet = Dropout(dropout_level, name='focus_dropout1')(token_subnet)
@@ -156,23 +157,12 @@ def build_model(token_len, token_char_vector_dict,
         outputs.append(lemma_label)
 
     if include_pos:
-        pos_label = Dense(nb_dense_dims,
-                            activation='relu',
+        pos_label = Dense(nb_tags,
                             name='pos_dense1')(joined)
         pos_label = Dropout(dropout_level,
                             name='pos_dense_dropout1')(pos_label)
-        pos_label = Dense(nb_dense_dims,
-                            activation='relu',
-                            name='pos_dense2')(pos_label)
-        pos_label = Dropout(dropout_level,
-                            name='pos_dense_dropout2')(pos_label)
-        pos_label = Dense(nb_tags,
-                            activation='relu',
-                            name='pos_dense3')(pos_label)
-        pos_label = Dropout(dropout_level,
-                            name='pos_dense_dropout3')(pos_label)
         pos_label = Activation('softmax',
-                                name='pos_out')(pos_label)
+                            name='pos_out')(pos_label)
         outputs.append(pos_label)
 
     if include_morph:
@@ -226,8 +216,11 @@ def build_model(token_len, token_char_vector_dict,
           loss_dict['morph_out'] = 'categorical_crossentropy'
         elif include_morph == 'multilabel':
           loss_dict['morph_out'] = 'binary_crossentropy'
-
+    
     model = Model(input=inputs, output=outputs)
-    model.compile(optimizer='RMSprop', loss=loss_dict)
-
+    if focus_repr == 'convolutions':
+        model.compile(optimizer='adam', loss=loss_dict)
+    else:
+        model.compile(optimizer='RMSprop', loss=loss_dict)
+    
     return model
