@@ -58,8 +58,6 @@ def load_annotated_file(filepath='text.txt', format='tab', nb_instances=None,
                         line.split()[:7]
                     if include_lemma:
                         lem = lem.lower().strip().replace(' ', '')
-                    if include_morph:
-                        '|'.join(sorted(set(morph.split('|'))))
                     tok = tok.strip().replace('~', '').replace(' ', '')
                     instances['token'].append(tok)
                     if include_lemma:

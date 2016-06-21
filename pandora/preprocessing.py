@@ -296,7 +296,7 @@ class Preprocessor():
                     if max_score[0] >= threshold:
                         m.append(self.morph_encoder.feature_names_[max_score[1]])
                 if m:
-                    morphs.append('|'.join(sorted(set(m))))
+                    morphs.append('|'.join(m))
                 else:
                     morphs.append('_')
         return morphs
