@@ -46,7 +46,7 @@ def main():
     tagger = Tagger(**params)
     tagger.setup_to_train(train_data=train_data,
                           dev_data=dev_data)
-
+    
     for i in range(int(params['nb_epochs'])):
         tagger.epoch()
         tagger.save()
