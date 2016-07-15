@@ -219,7 +219,7 @@ def build_model(token_len, token_char_vector_dict,
     
     model = Model(input=inputs, output=outputs)
     if focus_repr == 'convolutions':
-        model.compile(optimizer='adam', loss=loss_dict)
+        model.compile(optimizer='SGD', loss=loss_dict)
     else:
         model.compile(optimizer='RMSprop', loss=loss_dict)
     

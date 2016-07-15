@@ -65,11 +65,11 @@ class Pretrainer:
 
         # build an index of the train tokens
         # which occur at least min_count times:
-        self.token_idx = {}
+        self.token_idx = {'<UNK>': 0}
         for k, v in Counter(tokens).items():
             if v >= self.minimum_count:
                 self.token_idx[k] = len(self.token_idx)
-
+        
         # create an ordered vocab:
         self.train_token_vocab = [k for k, v in sorted(self.token_idx.items(),\
                         key=itemgetter(1))]
@@ -85,7 +85,7 @@ class Pretrainer:
                 weights.append(self.w2v_model[w])
             except KeyError:
                 weights.append(unk)
-        return [np.asarray(weights)]
+        return [np.asarray(weights, dtype='float32')]
 
     def transform(self, tokens):
 
@@ -121,7 +121,7 @@ class Pretrainer:
 
             context_ints.append(ints)
 
-        return np.asarray(context_ints, dtype='int8')
+        return np.asarray(context_ints, dtype='int32')
 
 
     def plot_mfi(self, outputfile='embeddings.pdf', nb_clusters=8, weights='NA'):

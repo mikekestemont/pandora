@@ -15,18 +15,18 @@ def main():
     params = pandora.utils.get_param_dict(cf_path)
     params['config_path'] = cf_path
     
-    train_data = pandora.utils.load_annotated_file('data/capitula_classic/train0.',
+    train_data = pandora.utils.load_annotated_file('data/mdu/cg-lit/cg-lit_train.tab',
     #train_data = pandora.utils.load_annotated_dir('data/mdu/all_train',
                                             format='tab',
-                                            extension='.tab',
+    #                                        extension='.tab',
                                             include_pos=params['include_pos'],
                                             include_lemma=params['include_lemma'],
                                             include_morph=params['include_morph'],
                                             nb_instances=None)
-    #dev_data = pandora.utils.load_annotated_file('data/capitula_classic/test0.tsv',
-    dev_data = pandora.utils.load_annotated_dir('data/mdu/all_test',
+    dev_data = pandora.utils.load_annotated_file('data/mdu/cg-lit/cg-lit_dev.tab',
+    #dev_data = pandora.utils.load_annotated_dir('data/mdu/all_test',
                                             format='tab',
-                                            extension='.tab',
+    #                                        extension='.tab',
                                             include_pos=params['include_pos'],
                                             include_lemma=params['include_lemma'],
                                             include_morph=params['include_morph'],

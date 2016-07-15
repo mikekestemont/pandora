@@ -3,7 +3,7 @@
 [global]
 nb_encoding_layers = 1
 nb_dense_dims = 1024
-batch_size = 50
+batch_size = 30
 nb_left_tokens = 2
 nb_right_tokens = 1
 nb_embedding_dims = 150
@@ -19,9 +19,9 @@ include_test = False
 nb_filters = 5000
 min_token_freq_emb = 5
 filter_length = 3
-focus_repr = recurrent
-dropout_level = 0.001
-nb_epochs = 100
-halve_lr_at = 75
+focus_repr = convolutions
+dropout_level = 0.5
+nb_epochs = 150
+halve_lr_at = 50
 max_token_len = 15
 min_lem_cnt = 1

@@ -84,7 +84,7 @@ def vectorize_token(seq, char_vector_dict, max_len, focus_repr):
     while len(seq_X) < max_len:
         seq_X.append(filler)
     
-    return np.array(seq_X)
+    return np.array(seq_X, dtype='float32')
 
 def vectorize_lemma(seq, char_vector_dict, max_len):
     # cut, if needed:
@@ -104,7 +104,7 @@ def vectorize_lemma(seq, char_vector_dict, max_len):
         except KeyError:
             seq_X.append(filler)
 
-    return np.array(seq_X)
+    return np.array(seq_X, dtype='float32')
 
 def parse_morphs(morph):
     morph_dicts = []
@@ -132,9 +132,10 @@ class Preprocessor():
         if max_token_len:
             self.max_token_len = max_token_len
         else:
-            self.max_token_len = len(max(tokens, key=len))+1
+            self.max_token_len = len(max(tokens, key=len)) + 1
 
         self.focus_repr = focus_repr
+        
         # fit focus tokens:
         self.token_char_dict, self.token_char_idx = \
             index_characters(tokens, focus_repr=self.focus_repr)
@@ -145,7 +146,7 @@ class Preprocessor():
             self.include_lemma = include_lemma
             self.known_lemmas = set(lemmas)
             if include_lemma == 'generate':
-                self.max_lemma_len = len(max(lemmas, key=len))+1
+                self.max_lemma_len = len(max(lemmas, key=len)) + 1
                 self.lemma_char_dict, self.lemma_char_idx = \
                     index_characters(lemmas)
             elif include_lemma == 'label':
