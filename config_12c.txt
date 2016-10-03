@@ -24,3 +24,4 @@ dropout_level = 0.5
 nb_epochs = 30
 halve_lr_at = 10
 max_token_len = False
+min_lem_cnt = 3
