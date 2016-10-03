@@ -1,0 +1,27 @@
+# Configuration file for the Pandora system
+
+[global]
+nb_encoding_layers = 1
+nb_dense_dims = 2000
+batch_size = 100
+nb_left_tokens = 2
+nb_right_tokens = 2
+nb_embedding_dims = 150
+model_dir = models/otinelAN
+postcorrect = True
+include_token = True
+include_context = True
+include_lemma = label
+include_pos = True
+include_morph = label
+include_dev = True
+include_test = False
+nb_filters = 100
+min_token_freq_emb = 5 
+filter_length = 3
+focus_repr = convolutions
+dropout_level = 0.15
+nb_epochs = 100
+halve_lr_at = 75 
+max_token_len = 15
+min_lem_cnt = 1
