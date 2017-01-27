@@ -15,24 +15,25 @@ def main():
     params = pandora.utils.get_param_dict(cf_path)
     params['config_path'] = cf_path
     
-    #train_data = pandora.utils.load_annotated_file('data/capitula_classic/train0.tsv',
+    train_data = pandora.utils.load_annotated_dir('data/medieval_latin/train',
+    #train_data = pandora.utils.load_annotated_file('data/new_cg/train.txt',
     #train_data = pandora.utils.load_annotated_file('data/mdu/relig/relig_train.tab',
-    train_data = pandora.utils.load_annotated_dir('data/wilhelmus/all_train',
+    #train_data = pandora.utils.load_annotated_dir('data/wilhelmus/all_train',
                                             format='tab',
-                                            extension='.tab',
+                                            extension='.tsv',
                                             include_pos=params['include_pos'],
                                             include_lemma=params['include_lemma'],
                                             include_morph=params['include_morph'],
                                             nb_instances=None)
     #dev_data = pandora.utils.load_annotated_file('data/mdu/relig/relig_dev.tab',
-    dev_data = pandora.utils.load_annotated_dir('data/wilhelmus/all_dev',
+    dev_data = pandora.utils.load_annotated_dir('data/medieval_latin/test',
                                             format='tab',
-                                            extension='.tab',
+                                            extension='.tsv',
                                             include_pos=params['include_pos'],
                                             include_lemma=params['include_lemma'],
                                             include_morph=params['include_morph'],
                                             nb_instances=None)
-
+    
     #test_data = pandora.utils.load_annotated_file('data/capitula_classic/test0.tsv',
     #dev_data = pandora.utils.load_annotated_file('data/mdu/cg-lit/cg-lit_dev.tab',
     #dev_data = pandora.utils.load_annotated_file('data/EMDu/train.txt',
