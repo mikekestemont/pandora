@@ -1,0 +1,5 @@
+seaborn
+gensim
+sklearn
+numpy
+keras
