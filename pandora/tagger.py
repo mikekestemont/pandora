@@ -17,6 +17,7 @@ from gensim.models import Word2Vec
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.manifold import TSNE
 
+import keras.backend as K
 from keras.utils import np_utils
 from keras.models import model_from_json
 
@@ -495,9 +496,9 @@ class Tagger():
         if self.curr_nb_epochs and self.halve_lr_at:
             # update learning rate at specific points:
             if self.curr_nb_epochs % self.halve_lr_at == 0:
-                old_lr  = self.model.optimizer.lr.get_value()
+                old_lr  = K.get_value(self.model.optimizer.lr)
                 new_lr = np.float32(old_lr * 0.5)
-                self.model.optimizer.lr.set_value(new_lr)
+                K.set_value(self.model.optimizer.lr, new_lr)
                 print('\t- Lowering learning rate > was:', old_lr, ', now:', new_lr)
 
         # get inputs and outputs straight:
