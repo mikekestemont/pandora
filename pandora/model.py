@@ -44,31 +44,20 @@ def build_model(token_len, token_char_vector_dict,
                 if i == 0:
                     curr_input = token_input
                 else:
-                    curr_input = curr_out
+                    curr_input = curr_enc_out
 
                 if i == (nb_encoding_layers - 1):
-                    l2r = LSTM(output_dim=nb_dense_dims,
-                               return_sequences=False,
-                               activation='tanh',
-                               name='final_left')(curr_input)
-                    r2l = LSTM(output_dim=nb_dense_dims,
-                               return_sequences=False,
-                               activation='tanh',
-                               go_backwards=True,
-                               name='final_right')(curr_input)
-                    token_subnet = merge([l2r, r2l], name='final_focus_encoder', mode='sum')
+                    token_subnet = Bidirectional(LSTM(output_dim=nb_dense_dims,
+                                                  return_sequences=False,
+                                                  activation='tanh',
+                                                  name='final_focus_encoder'),
+                                             merge_mode='sum')(curr_input)
                 else:
-                    l2r = LSTM(output_dim=nb_dense_dims,
-                               return_sequences=True,
-                               activation='tanh',
-                               name='left_enc_lstm_'+str(i + 1))(curr_input)
-                    r2l = LSTM(output_dim=nb_dense_dims,
-                               return_sequences=True,
-                               activation='tanh',
-                               go_backwards=True,
-                               name='right_enc_lstm_'+str(i + 1))(curr_input)
-                    curr_out = merge([l2r, r2l], name='encoder_'+str(i+1), mode='sum')
-
+                    curr_enc_out = Bidirectional(LSTM(output_dim=nb_dense_dims,
+                                                  return_sequences=True,
+                                                  activation='tanh',
+                                                  name='encoder_'+str(i+1)),
+                                             merge_mode='sum')(curr_input)
         elif focus_repr == 'convolutions':
             token_subnet = Convolution1D(input_shape=(token_len, len(token_char_vector_dict)),
                                          nb_filter=nb_filters,
@@ -116,31 +105,23 @@ def build_model(token_len, token_char_vector_dict,
     if include_lemma:
         if include_lemma == 'generate':
             repeat = RepeatVector(lemma_len, name='encoder_repeat')(joined)
-            
-            # add recurrent layers to generate lemma:
+
             for i in range(nb_encoding_layers):
                 if i == 0:
                     curr_input = repeat
                 else:
                     curr_input = curr_out
 
-                l2r = LSTM(output_dim=nb_dense_dims,
-                               return_sequences=True,
-                               activation='tanh',
-                               name='left_dec_lstm_'+str(i + 1))(curr_input)
-                r2l = LSTM(output_dim=nb_dense_dims,
-                               return_sequences=True,
-                               activation='tanh',
-                               go_backwards=True,
-                               name='right_dec_lstm_'+str(i + 1))(curr_input)
-
                 if i == (nb_encoding_layers - 1):
                     output_name = 'final_focus_decoder'
                 else:
                     output_name = 'decoder_'+str(i + 1)
 
-                curr_out = merge([l2r, r2l], name=output_name, mode='sum')
-
+                curr_out = Bidirectional(LSTM(output_dim=nb_dense_dims,
+                                                  return_sequences=True,
+                                                  activation='tanh',
+                                                  name=output_name),
+                                             merge_mode='sum')(curr_input)
             # add lemma decoder
             lemma_label = TimeDistributed(Dense(len(lemma_char_vector_dict)),
                             name='lemma_dense')(curr_out)
